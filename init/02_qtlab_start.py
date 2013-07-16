@@ -34,8 +34,11 @@ from time import sleep
 
 #set_debug(True)
 from lib.network import object_sharer as objsh
-objsh.root.set_instance_name(_cfg.get('instance_name', ''))
-objsh.start_glibtcp_server(port=_cfg.get('port', objsh.PORT))
+iname = _cfg.get('instance_name', '')
+objsh.root.set_instance_name(iname)
+print 'Setting instance name to %s' % iname
+from lib.network import share_gtk
+share_gtk.start_server('localhost', port=_cfg.get('port', objsh.PORT))
 for _ipaddr in _cfg['allowed_ips']:
     objsh.SharedObject.server.add_allowed_ip(_ipaddr)
 objsh.PythonInterpreter('python_server', globals())
