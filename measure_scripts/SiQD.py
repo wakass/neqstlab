@@ -23,19 +23,20 @@ def turnon(DAC_vec):
     bv=numpy.arange(-5,5,0.1)
     SiQD.example1(fv, bv)
     '''
-
+    eefje = qt.instruments.get_instruments()['Eefje']
+    elKeef =qt.instruments.get_instruments()['ElKeefLy']
     qt.mstart()
 
 	
-	#Set maximum sweep rate to not blow up device
-	#40 mV steps, 40 ms waittime per step
-	eefje.set_parameter_rate('dac1',40,40)
+    #Set maximum sweep rate to not blow up device
+    #40 mV steps, 40 ms waittime per step
+    eefje.set_parameter_rate('dac1',1,300)
     
     
     data = qt.Data(name='Turn On')
-    data.add_coordinate('Gate voltage V_g [mV])
+    data.add_coordinate('Gate voltage V_g [mV]')
     data.add_coordinate('I_{SD} [mV]')
-    data.add_value('turnon')
+
     data.create_file()
 
     #plot2d = qt.Plot2D(data, name='measure2D')
@@ -45,7 +46,7 @@ def turnon(DAC_vec):
     for d in DAC_vec:
         eefje.set_dac1(d)
         result = elKeef.get_readlastval()
-        data.add_data_point(b, result)
+        data.add_data_point(d, result)
 
         qt.msleep(0.01)
 
