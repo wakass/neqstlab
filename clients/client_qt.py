@@ -17,17 +17,21 @@ import sip
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
 from PyQt4 import QtGui, QtCore
+# 
+# from PySide import QtCore
+# from PySide import QtGui
+# from PySide import QtDeclarative
 
 from lib.network import share_qt
 from lib.network import object_sharer as objsh
 
-def close_client(self):
+def _close_client_cb(*args):
     app.exit()
     app.quit()
-    sys.exit()
 
 # here we go...
 if __name__ == "__main__":
+
     global app
     app = QtGui.QApplication.instance()
     if app is None:
@@ -35,11 +39,11 @@ if __name__ == "__main__":
 
     # Start object sharer integrated with Qt main loop
     # will fail if no connection to qtlab is available
-    share_qt.start_client('localhost', args.port)
+    handler = share_qt.start_client('localhost', args.port)
 
     # Be sure to talk to the qtlab instance that we just connected to
     flow = objsh.helper.find_object('%s:flow' % handler.client.get_instance_name())
-    flow.connect('close-gui', close_client)
+    flow.connect('close-gui', _close_client_cb)
 
     if args.module:
         logging.info('Importing %s', args.module)

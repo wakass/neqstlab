@@ -424,7 +424,7 @@ class ObjectSharer():
             self._send_queue[conn] = []
         self._send_queue[conn].append(tosend)
         self._process_send_queue()
-
+    
     def _call_cb(self, callid, val):
         if callid in self._return_vals:
             logging.warning('Received late reply for call %d', callid)
@@ -461,7 +461,7 @@ class ObjectSharer():
         cmd = self._pickle_packet(info, callinfo)
         start_time = time.time()
         self.send_packet(conn, cmd)
-
+        
         if not blocking:
             return
 
@@ -516,6 +516,7 @@ class ObjectSharer():
 
         self._callbacks_hid[self._last_hid] = info
         name = '%s__%s' % (objname, signame)
+        logging.warning('Now registering: %s with signame: %s', objname,signame)
         if name in self._callbacks_name:
             self._callbacks_name[name].append(info)
         else:
@@ -539,12 +540,12 @@ class ObjectSharer():
 
         kwargs['signal'] = True
         for client in self._clients:
+            logging.debug('Emitting to client: name %s, instance %s', client.get_instance_name(), client)
             client.receive_signal(objname, signame, *args, **kwargs)
 
     def receive_signal(self, objname, signame, *args, **kwargs):
         logging.debug('Received signal %s(%r, %r) from %s',
                 signame, args, kwargs, objname)
-
         ncalls = 0
         start = time.time()
         name = '%s__%s' % (objname, signame)

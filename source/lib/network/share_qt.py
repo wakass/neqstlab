@@ -2,6 +2,8 @@ import object_sharer as objsh
 import socket
 import time
 import logging
+from lib.network.tcpserverqt import QtTCPHandler
+import gobject
 
 class Handler(QtTCPHandler):
     def __init__(self, sock, client_address, server):
@@ -12,9 +14,16 @@ class Handler(QtTCPHandler):
     def handle(self, data):
         if len(data) > 0:
             data = objsh.helper.handle_data(self.socket, data)
+        return True
 
-def start_server(host='', port=objsh.PORT):
-    pass
+_flush_queue_hid = None
+
+def setup_glib_flush_queue():
+    global _flush_queue_hid
+    if _flush_queue_hid is not None:
+        return
+    _flush_queue_hid = gobject.timeout_add(2000, objsh.helper._process_send_queue)
+
 
 def start_client(host, port=objsh.PORT, nretry=1):
     while nretry > 0:
@@ -23,7 +32,7 @@ def start_client(host, port=objsh.PORT, nretry=1):
             sock.connect((host, port))
             handler = Handler(sock, 'client', 'server')
             setup_glib_flush_queue()
-            return handler.client
+            return handler
         except Exception, e:
             logging.warning('Failed to start sharing client: %s', str(e))
             if nretry > 0:

@@ -24,7 +24,7 @@ import time
 import re
 import logging
 
-class GlibTCPServer():
+class GlibTCPServer(object):
     """GlibTCPServer
 
     Integrate socket accept into glib mainloop.
@@ -82,7 +82,7 @@ class GlibTCPServer():
             return True
         return False
 
-class GlibTCPHandler():
+class GlibTCPHandler(object):
     '''
     Class to do asynchronous request handling integrated with GTK mainloop.
     '''

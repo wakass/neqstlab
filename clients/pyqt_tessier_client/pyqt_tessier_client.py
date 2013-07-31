@@ -91,10 +91,8 @@ rc.setContextProperty('pythonListModel', zenItemList)
 view.setSource(__file__.replace('.py', '.qml'))
 
 def _close_client_cb(*args):
-
     app.exit()
     app.quit()
-    sys.exit()
 
 objsh.helper.register_event_callback('disconnected', _close_client_cb)
 

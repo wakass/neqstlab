@@ -35,7 +35,7 @@ if __name__ == "__main__":
     flow = objsh.helper.find_object('%s:flow' % srv.get_instance_name())
     flow.connect('close-gui', _close_gui_cb)
 
-    # Or if disconected
+    # Or if disconnected
     objsh.helper.register_event_callback('disconnected', _close_gui_cb)
 
     if args.module:

@@ -21,9 +21,10 @@ import gobject
 import socket
 
 from lib.network.object_sharer import helper, PORT
-from lib.network.tcpserver import GlibTCPHandler
+from lib.network.tcpservergtk import GlibTCPHandler
 
 from PyQt4 import QtGui, QtCore
+# from PySide import QtGui, QtCore
 
 # methods/classes for QT4 clients that replace the glib-based ones
 class QtTCPHandler(GlibTCPHandler, QtCore.QObject):
@@ -33,8 +34,8 @@ class QtTCPHandler(GlibTCPHandler, QtCore.QObject):
 
         self.socket_notifier = QtCore.QSocketNotifier(\
             self.socket.fileno(), QtCore.QSocketNotifier.Read)
-        self.socket_notifier.setEnabled(True)
         self.socket_notifier.activated.connect(self._socketwatcher_recv)
+        self.socket_notifier.setEnabled(True)
 
     def enable_callbacks(self):
         return
@@ -43,8 +44,10 @@ class QtTCPHandler(GlibTCPHandler, QtCore.QObject):
         return
 
     def _socketwatcher_recv(self, *args):
+        self.socket_notifier.setEnabled(False)
         self._handle_recv(self.socket, gobject.IO_IN)
-
+        self.socket_notifier.setEnabled(True)
+        
 class QtQtlabHandler(QtTCPHandler):
     def __init__(self, sock, client_address, server):
         QtTCPHandler.__init__(self, sock, client_address, server,
