@@ -16,7 +16,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-import gobject
+try:
+    import gobject
+    gobjects.thread_init()
+except:
+    pass
+
 import gtk
 import logging
 import time
@@ -24,6 +29,7 @@ from gettext import gettext as _L
 from lib.misc import exact_time, get_traceback
 from lib.network.object_sharer import SharedGObject
 import os
+
 
 AutoFormattedTB = get_traceback()
 

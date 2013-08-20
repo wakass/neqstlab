@@ -17,6 +17,7 @@
 
 import time
 import logging
+import warnings
 try:
     from visa import *
     from pyvisa import vpp43

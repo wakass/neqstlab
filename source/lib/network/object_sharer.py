@@ -25,7 +25,11 @@ import copy
 import random
 import inspect
 import time
-import gobject
+try:
+	import gobject
+	gobject.threads_init()
+except:
+	pass
 import types
 
 PORT = 12002
