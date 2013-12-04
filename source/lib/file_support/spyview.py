@@ -15,7 +15,7 @@ class SpyView():
 
         ncoords = self._data.get_ncoordinates()
         if ncoords not in (2,3):
-            loggin.error('this function currently only supports data files \
+            logging.error('this function currently only supports data files \
                     with 2 or 3 coordinate dimensions. The data provided has \
                     %d coordinate dimensions', ncoords)
 
