@@ -18,7 +18,8 @@
 
 from instrument import Instrument
 from time import time, sleep
-import visa
+#import visa
+import pyvisa.visa as visa
 import types
 import logging
 
