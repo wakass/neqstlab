@@ -114,8 +114,12 @@ class OxfordInstruments_ITC503S(Instrument):
         self.get_T1()
         self.get_T2()
         self.get_T3()
+        self.get_p()
+        self.get_i()
+        self.get_d()
+        self.get_T_setpoint()
         self.get_heater()
-        self.get_status()
+        self.get_remote_status()
 
     # Functions
     def _execute(self, message):
