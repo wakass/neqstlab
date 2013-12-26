@@ -170,7 +170,7 @@ class parspace(object):
 		plotvaldim =1
 		if len(self.xs) > 1:
 			plotvaldim = len(self.xs)
-			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-3), valdim=plotvaldim, style='image')
+			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-1,plotvaldim-2), valdim=plotvaldim, style='image')
 		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10)
 		cnt = 0
 		
