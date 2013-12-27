@@ -214,7 +214,7 @@ class parspace(object):
 					print e
 				
 				qt.msleep(0.001)
-		except Exception as e:
+		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 
 			#handle an abort with some grace for hdf5 et.al.
 			dat.close()
