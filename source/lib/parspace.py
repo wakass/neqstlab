@@ -104,8 +104,17 @@ class parspace(object):
 	def set_name(self,name):
 		self.measurementname = name
 	
-	def remove_param(self, label='Optional'):
+	def remove_param(self, param, label='Optional'):
+# 		for i in range(len(self.xs)):
+# 			i = self.xs[i]
+# 			if i.__hash__() == param.__hash__():
+		self.xs.remove(param)		
+				
+			
 		raise Exception('not implemented yet')
+	
+	def replace_param(self, param, label='Optional'):
+		pass
 	
 	def remove_all_param(self, label='Optional'):	
 		self.xs = []
@@ -170,7 +179,7 @@ class parspace(object):
 		plotvaldim =1
 		if len(self.xs) > 1:
 			plotvaldim = len(self.xs)
-			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-1,plotvaldim-2), valdim=plotvaldim, style='image')
+			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
 		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10)
 		cnt = 0
 		
