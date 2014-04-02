@@ -12,6 +12,8 @@ import this
 adddir = os.path.join(os.getcwd(), 'source')
 sys.path.insert(0, adddir)
 
+import paramspace
+
 # We should not overwrite the config file set up by client_shared.py
 from lib import config
 config = config.get_config()
@@ -43,8 +45,8 @@ class ZenWrapper(QtCore.QObject):
 
     changed = QtCore.Signal()
 
-    name = QtCore.Property(unicode, _name, notify=changed)
-    checked = QtCore.Property(bool, is_checked, notify=changed)
+    instrument = QtCore.Property(unicode, _name, notify=changed)
+    properties = QtCore.Property(bool, is_checked, notify=changed)
 
 class ZenListModel(QtCore.QAbstractListModel):
     def __init__(self, zenItems):
@@ -71,6 +73,10 @@ class Controller(QtCore.QObject):
         print '='*20, 'New List', '='*20
         print '\n'.join(x.name for x in new_list)
         view.setWindowTitle('%s (%d)' % (__doc__, len(new_list)))
+    @QtCore.Slot()
+    def startmeasure(self):
+    	paramspace.start_test()
+    	view.setWindowTitle('For great victory')
 
 zenItems = [ZenWrapper(zenItem) for zenItem in \
         ''.join([this.d.get(c, c) for c in \
@@ -91,8 +97,14 @@ rc.setContextProperty('pythonListModel', zenItemList)
 view.setSource(__file__.replace('.py', '.qml'))
 
 def _close_client_cb(*args):
-    app.exit()
-    app.quit()
+    global app
+    try:
+       app.exit()
+       app.quit()
+    except:
+       print 'Couldn\'t exit app'
+
+
 
 objsh.helper.register_event_callback('disconnected', _close_client_cb)
 

@@ -25,7 +25,7 @@ def hilbert(x0, y0, xi, xj, yi, yj, n):
 
 def plothilby():
     global curve
-    plot(curve[:-500,0],curve[:-500,1])
+    plot(curve[:,0],curve[:,1])
     show(block=True)
     
 def anim_data_gen():
@@ -58,11 +58,12 @@ def animhilby_func(data):
 
 
 #define iterations
-reps = 7
+reps = 5
 # Calculate the number of curve cv's
 cvs = int(math.pow(4, reps))
         
 # Create the curve
 hilbert(0.0, 0.0, 1.0, 0, 0.0, 1.0, reps)
 ani = animation.FuncAnimation(fig, animhilby_func, anim_data_gen, blit=True, interval=10, repeat=False)
-show(block=False)
+show(block=True)
+# plothilby()

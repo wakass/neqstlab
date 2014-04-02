@@ -34,12 +34,15 @@ def hilbert_gen(xs, n=3,**lopts):
 	return hilbert_it(xs[0].begin, xs[1].begin, xs[0].end-xs[0].begin, 0,0, xs[1].end-xs[1].begin, n)
 	
 def hilbert_mul(xs,n=3,**lopts):
+	if len(xs) < 2:
+		raise Exception('Only works on 2d or more')
 	if len(xs) > 2:
 		for i in sweep_gen(xs[:-2],**lopts):
 			for j in hilbert_it(xs[-2].begin, xs[-1].begin, xs[-2].end-xs[-2].begin, 0,0, xs[-1].end-xs[-1].begin, n):
 				yield {'dp': np.append(i['dp'],j['dp']), 'newblock':i['newblock']}
 	else:
-		yield hilbert_gen(xs,**lopts)
+		for i in hilbert_gen(xs,**lopts):
+			yield i
 
 def sweep_gen(xs,**lopts):
 	#options are sweepback and datablock bit
@@ -63,7 +66,7 @@ def sweep_gen_helper(xs,**lopts):
 				lopts['flipbit'] ^= 1
 	else:
 		for i in u[:-1]:
-			yield {'dp': i, 'newblock':0}
+			yield {'dp': [i], 'newblock':0}
 		yield {'dp': u[-1],'newblock':1}
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
@@ -176,7 +179,7 @@ class parspace(object):
 			
 		data.create_file()
         
-		plotvaldim =1
+		plotvaldim =2
 		if len(self.xs) > 1:
 			plotvaldim = len(self.xs)
 			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
@@ -184,6 +187,7 @@ class parspace(object):
 		cnt = 0
 		
 		try:
+			print self.traverse_gen(self.xs)
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
 # 				print dp
@@ -199,9 +203,13 @@ class parspace(object):
 				# if cnt == 0:
 					# qt.msleep(4) #wait 4 seconds to start measuring to allow for capacitive effects to dissipate
 					# cnt +=1
-				r = self.zs[0].module()
-	
-				allmeas = np.hstack((i,r))
+				
+				
+				allmeas = i
+				for ax in self.zs:
+					allmeas = np.hstack((allmeas,ax.module()))
+
+# 				allmeas = np.hstack((i,r))
 				print allmeas
 				
 				#get keys for all dimensions
@@ -209,8 +217,10 @@ class parspace(object):
 				#write to them
 				##todo: check if dataset exceeded
 				##expand dataset every time with 100?
-				for i in range(len(kz)):
-					grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
+				#for i in range(len(kz)):
+				#	grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
+				for i,j in enumerate(kz):
+					grp[j] = np.append(grp[j],allmeas[i])
 				
 				data.add_data_point(*allmeas)
 				#read out the control bit if it exists..

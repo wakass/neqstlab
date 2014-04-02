@@ -16,23 +16,29 @@ args, pargs = client_shared.process_args()
 import sip
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
-from PyQt4 import QtGui, QtCore
+# from PyQt4 import QtGui, QtCore
 # 
-# from PySide import QtCore
-# from PySide import QtGui
-# from PySide import QtDeclarative
+from PySide import QtCore
+from PySide import QtGui
+from PySide import QtDeclarative
 
 from lib.network import share_qt
 from lib.network import object_sharer as objsh
 
 def _close_client_cb(*args):
-    app.exit()
-    app.quit()
+    global app
+    print 'closing client'
+    QtGui.QApplication.quit()
+    try:
+       app.exit()
+       app.quit()
+    except:
+       print 'hoi'
 
 # here we go...
 if __name__ == "__main__":
 
-    global app
+#     global app
     app = QtGui.QApplication.instance()
     if app is None:
         app = QtGui.QApplication([sys.argv[0],])
@@ -48,5 +54,8 @@ if __name__ == "__main__":
     if args.module:
         logging.info('Importing %s', args.module)
         __import__(args.module, globals())
+	
+	app.references = set()
+	
 
-    app.exec_()
+    sys.exit(app.exec_())

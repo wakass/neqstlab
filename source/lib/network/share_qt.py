@@ -3,7 +3,11 @@ import socket
 import time
 import logging
 from lib.network.tcpserverqt import QtTCPHandler
+
 import gobject
+#fix to load qt properly in combination with gtk
+gobject.threads_init()
+
 
 class Handler(QtTCPHandler):
     def __init__(self, sock, client_address, server):

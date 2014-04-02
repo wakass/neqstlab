@@ -27,7 +27,7 @@ import inspect
 import time
 try:
 	import gobject
-	gobject.threads_init()
+# 	gobject.threads_init()
 except:
 	pass
 import types

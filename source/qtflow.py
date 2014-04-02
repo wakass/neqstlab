@@ -18,7 +18,7 @@
 
 try:
     import gobject
-    gobjects.thread_init()
+#     gobject.thread_init()
 except:
     pass
 

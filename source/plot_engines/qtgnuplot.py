@@ -350,8 +350,16 @@ class _QTGnuPlot():
         '''
         Perform an update of the plot.
         '''
-        cmd = self.create_plot_command()
-        self.cmd(cmd)
+
+        cmd = self.create_plot_command()  
+        
+        import ipdb
+        ipdb.set_trace()      
+        import timeit
+        timeit.timeit(self.cmd,(self,cmd))
+#         self.cmd(cmd)
+
+        
         return True
 
     def cmd(self, cmdstr):

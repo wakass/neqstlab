@@ -30,10 +30,10 @@ def turnon(DAC_vec):
 	
     #Set maximum sweep rate to not blow up device
     #40 mV steps, 40 ms waittime per step
-    eefje.set_parameter_rate('dac1',1,300)
+    eefje.set_parameter_rate('dac1',40,20)
     
     
-    data = qt.Data(name='Turn On')
+    data = qt.Data(name='Turn On Device 2Y')
     data.add_coordinate('Gate voltage V_g [mV]')
     data.add_coordinate('I_{SD} [mV]')
 
