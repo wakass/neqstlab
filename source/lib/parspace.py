@@ -64,7 +64,7 @@ def sweep_gen_helper(xs,**lopts):
 	else:
 		for i in u[:-1]:
 			yield {'dp': i, 'newblock':0}
-		yield {'dp': u[-1],'newblock':1}
+		yield {'dp': [u[-1]],'newblock':1}
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
@@ -81,6 +81,7 @@ class param(object):
 		self.steps = []
 		self.stepsize = []
 		self.rate_stepsize = []
+		self.eff_rate_stepsize = []
 		self.rate_delay = []
 		self.label = ''
 		self.unit = 'a.u.'
@@ -131,7 +132,36 @@ class parspace(object):
 			self.traverse_gen = lambda xs: sweep_gen(xs,*kwargs,**lopts)
 		else:
 			raise Exception('Unknown traverse function specified')
-				
+	
+	def estimate_time(self):
+		#calculate time, try at least
+		#assume no sweepback measure2D
+		try:
+			#'loop' axis
+			ax0_time = np.abs(self.xs[-2].begin - self.xs[-2].end) / (self.xs[-2].eff_rate_stepsize / (self.xs[-2].rate_delay/1000.))
+			ax0_steps = np.abs(self.xs[-2].begin - self.xs[-2].end) / np.abs(self.xs[-2].stepsize)
+			print self.xs[-2].label
+			print ax0_time
+			print ax0_steps
+			print np.abs(self.xs[-2].begin - self.xs[-2].end)
+			print self.xs[-2].eff_rate_stepsize / (self.xs[-2].rate_delay/1000.)
+			
+			#'sweep' axis
+			ax1_time = np.abs(self.xs[-1].begin - self.xs[-1].end) / (self.xs[-1].eff_rate_stepsize / (self.xs[-1].rate_delay/1000.))
+			ax1_steps = np.abs(self.xs[-1].begin - self.xs[-1].end) / np.abs(self.xs[-1].stepsize)
+			
+			print self.xs[-1].label
+			print ax1_time
+			print ax1_steps
+			print np.abs(self.xs[-1].begin - self.xs[-1].end)
+			print self.xs[-1].eff_rate_stepsize / (self.xs[-1].rate_delay/1000.)
+			
+			time = ax1_time*ax0_steps*2 + ax0_time
+			import datetime
+			print time
+			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
+		except Exception as e:
+			print e
 	def traverse(self):
 		#traverse the defined parameter space, using e.g. a space filling curve defined in self.traverse_func
 		instruments = []
@@ -180,9 +210,12 @@ class parspace(object):
 		if len(self.xs) > 1:
 			plotvaldim = len(self.xs)
 			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
-		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10)
+		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10,autoupdate=False)
 		cnt = 0
+
 		
+
+			
 		try:
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
@@ -191,8 +224,10 @@ class parspace(object):
 
 				try:
 					for x in range(len(self.xs)):
-						functocall = getattr(instruments[x],'set_%s' % self.xs[x].module_options['var'])
-						functocall(i[x])
+						#functocall = getattr(instruments[x],'set_%s' % self.xs[x].module_options['var'])
+						#functocall(i[x])
+						
+						self.xs[x].module(i[x])
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e
 					
@@ -209,8 +244,9 @@ class parspace(object):
 				#write to them
 				##todo: check if dataset exceeded
 				##expand dataset every time with 100?
-				for i in range(len(kz)):
-					grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
+				#temporarily stop writing hdf5
+				#for i in range(len(kz)):
+				#	grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
 				
 				data.add_data_point(*allmeas)
 				#read out the control bit if it exists..
@@ -219,6 +255,7 @@ class parspace(object):
 					#fixme
 					if 'newblock' in dp and dp['newblock'] == 1:
 						data.new_block()
+						plot2d.update()
 				except Exception as e:
 					print e
 				
