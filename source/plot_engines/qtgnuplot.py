@@ -353,11 +353,11 @@ class _QTGnuPlot():
 
         cmd = self.create_plot_command()  
         
-        import ipdb
-        ipdb.set_trace()      
-        import timeit
-        timeit.timeit(self.cmd,(self,cmd))
-#         self.cmd(cmd)
+        #import ipdb
+        #ipdb.set_trace()      
+        #import timeit
+        #timeit.timeit(self.cmd,(self,cmd))
+        self.cmd(cmd)
 
         
         return True
