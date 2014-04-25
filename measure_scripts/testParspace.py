@@ -18,12 +18,14 @@ ax1.rate_stepsize = 1.
 ax1.rate_delay = 10
 ax1.instrument = 'dsgen1'
 ax1.label = 'x'
+ax1.module = lambda x: dsgen1.set_amplitude(x)
 ax1.module_name = 's1f'#'dac','s1c'
 ax1.module_options = {'dac':5, 
+						'name':'s1f',
 						'rate_stepsize':.5,
 						'rate_delay': 10.,
 						'var':'amplitude',
-						'amplification':'100M' }
+						'gain':1. }
 
 
 ax2 = ps.param()
@@ -39,7 +41,7 @@ ax2.module_options = {'dac':5,
 						'rate_stepsize':.5,
 						'rate_delay': 10.,
 						'var':'amplitude',
-						'amplification':'100M' }
+						'gain':1. }
 ax2.module = lambda x: dsgen2.set_amplitude(x)
 
 import copy
@@ -55,7 +57,7 @@ z.module = lambda: dsgen1.get_amplitude() + dsgen2.get_amplitude() + dsgen3.get_
 ping = ps.parspace()
 ping.add_param(ax1)
 ping.add_param(ax2)
-ping.add_param(ax3)
+#ping.add_param(ax3)
 
 ping.add_paramz(z)
 
