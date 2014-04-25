@@ -140,21 +140,19 @@ class parspace(object):
 			#'loop' axis
 			ax0_time = np.abs(self.xs[-2].begin - self.xs[-2].end) / (self.xs[-2].eff_rate_stepsize / (self.xs[-2].rate_delay/1000.))
 			ax0_steps = np.abs(self.xs[-2].begin - self.xs[-2].end) / np.abs(self.xs[-2].stepsize)
-			print self.xs[-2].label
-			print ax0_time
-			print ax0_steps
-			print np.abs(self.xs[-2].begin - self.xs[-2].end)
-			print self.xs[-2].eff_rate_stepsize / (self.xs[-2].rate_delay/1000.)
+			label= self.xs[-2].label
+			range= np.abs(self.xs[-2].begin - self.xs[-2].end)
+			speed= self.xs[-2].eff_rate_stepsize / (self.xs[-2].rate_delay/1000.)
+			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax0_time,'steps':ax0_steps,'range':range,'speed':speed}
+
 			
 			#'sweep' axis
 			ax1_time = np.abs(self.xs[-1].begin - self.xs[-1].end) / (self.xs[-1].eff_rate_stepsize / (self.xs[-1].rate_delay/1000.))
 			ax1_steps = np.abs(self.xs[-1].begin - self.xs[-1].end) / np.abs(self.xs[-1].stepsize)
-			
-			print self.xs[-1].label
-			print ax1_time
-			print ax1_steps
-			print np.abs(self.xs[-1].begin - self.xs[-1].end)
-			print self.xs[-1].eff_rate_stepsize / (self.xs[-1].rate_delay/1000.)
+			label= self.xs[-1].label
+			range= np.abs(self.xs[-1].begin - self.xs[-1].end)
+			speed= self.xs[-1].eff_rate_stepsize / (self.xs[-1].rate_delay/1000.)
+			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax1_time,'steps':ax1_steps,'range':range,'speed':speed}
 			
 			time = ax1_time*ax0_steps*2 + ax0_time
 			import datetime
@@ -234,6 +232,13 @@ class parspace(object):
 				# if cnt == 0:
 					# qt.msleep(4) #wait 4 seconds to start measuring to allow for capacitive effects to dissipate
 					# cnt +=1
+				mwait = 0
+				if hasattr(self.zs[0],'module_options'):
+					if 'measure_wait' in self.zs[0].module_options:
+						mwait = self.zs[0].module_options['measure_wait']
+				if mwait != 0:
+					sleep(mwait)
+				
 				r = self.zs[0].module()
 	
 				allmeas = np.hstack((i,r))

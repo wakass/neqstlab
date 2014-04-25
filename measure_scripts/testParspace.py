@@ -24,6 +24,8 @@ ax1.module_options = {'dac':5,
 						'rate_delay': 10.,
 						'var':'amplitude',
 						'amplification':'100M' }
+ax1.module = lambda x: dsgen1.set_amplitude(x)
+
 
 
 ax2 = ps.param()
@@ -46,6 +48,8 @@ import copy
 ax3 = copy.deepcopy(ax2)
 ax3.label = 'z'
 ax3.instrument='dsgen3'
+ax3.module = lambda x: dsgen2.set_amplitude(x)
+
 
 z = ps.param()
 z.label = 'value'
@@ -55,7 +59,7 @@ z.module = lambda: dsgen1.get_amplitude() + dsgen2.get_amplitude() + dsgen3.get_
 ping = ps.parspace()
 ping.add_param(ax1)
 ping.add_param(ax2)
-ping.add_param(ax3)
+#ping.add_param(ax3)
 
 ping.add_paramz(z)
 
