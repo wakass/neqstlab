@@ -64,7 +64,7 @@ def sweep_gen_helper(xs,**lopts):
 	else:
 		for i in u[:-1]:
 			yield {'dp': [i], 'newblock':0}
-	yield {'dp': [u[-1]],'newblock':1}
+		yield {'dp': [u[-1]],'newblock':1}
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
@@ -230,13 +230,7 @@ class parspace(object):
 				i = dp['dp']
 
 				try:
-					for x in range(len(self.xs)):
-						if hasattr(self.zs[0],'module_options'):
-							if 'measure_wait' in self.zs[0].module_options:
-							mwait = self.zs[0].module_options['measure_wait']
-							if mwait != 0:
-								sleep(mwait)
-				
+					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
 						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						
@@ -244,7 +238,13 @@ class parspace(object):
 						functocall(value)
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e
-					
+				
+				
+				if hasattr(self.zs[0],'module_options'):
+					if 'measure_wait' in self.zs[0].module_options:
+						mwait = self.zs[0].module_options['measure_wait']
+						if mwait != 0:
+							sleep(mwait)
 				r = self.zs[0].module()
 	
 				allmeas = np.hstack((i,r))
