@@ -63,8 +63,8 @@ def sweep_gen_helper(xs,**lopts):
 				lopts['flipbit'] ^= 1
 	else:
 		for i in u[:-1]:
-			yield {'dp': i, 'newblock':0}
-		yield {'dp': [u[-1]],'newblock':1}
+			yield {'dp': [i], 'newblock':0}
+	yield {'dp': [u[-1]],'newblock':1}
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
@@ -166,12 +166,21 @@ class parspace(object):
 		for x in self.xs:
 			instr = qt.instruments.get_instruments()[x.instrument]
 			
+			
 			rate_delay = x.module_options['rate_delay']
 			rate_stepsize = x.module_options['rate_stepsize']
 			variable = x.module_options['var']
 			
+			if 'name' not in x.module_options:
+				x.module_options['name'] = ''
+			
+			if 'gain' not in x.module_options:
+				x.module_options['gain'] =1.
+
 			#transform here also according to chosen module?
+			rate_stepsize = rate_stepsize / x.module_options['gain']
 			instr.set_parameter_rate(variable,rate_stepsize,rate_delay)
+			instr.module_options = x.module_options
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
@@ -222,23 +231,20 @@ class parspace(object):
 
 				try:
 					for x in range(len(self.xs)):
-						#functocall = getattr(instruments[x],'set_%s' % self.xs[x].module_options['var'])
-						#functocall(i[x])
+						if hasattr(self.zs[0],'module_options'):
+							if 'measure_wait' in self.zs[0].module_options:
+							mwait = self.zs[0].module_options['measure_wait']
+							if mwait != 0:
+								sleep(mwait)
+				
+						module_options = self.xs[x].module_options
+						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						
-						self.xs[x].module(i[x])
+						value = i[x] / module_options['gain']
+						functocall(value)
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e
 					
-				# if cnt == 0:
-					# qt.msleep(4) #wait 4 seconds to start measuring to allow for capacitive effects to dissipate
-					# cnt +=1
-				mwait = 0
-				if hasattr(self.zs[0],'module_options'):
-					if 'measure_wait' in self.zs[0].module_options:
-						mwait = self.zs[0].module_options['measure_wait']
-				if mwait != 0:
-					sleep(mwait)
-				
 				r = self.zs[0].module()
 	
 				allmeas = np.hstack((i,r))
