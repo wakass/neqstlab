@@ -18,15 +18,12 @@ ax1.rate_stepsize = 1.
 ax1.rate_delay = 40.
 ax1.instrument = 'dsgen1'
 ax1.label = 'x'
-ax1.module_name = 's1f'#'dac','s1c'
-ax1.module = lambda x: dsgen1.set_amplitude(x)
-
 ax1.module_options = {'dac':5, 
-						'rate_stepsize':1.,
-						'rate_delay': 40.,
+						'name':'s1f',
+						'rate_stepsize':.5,
+						'rate_delay': 10.,
 						'var':'amplitude',
-						'amplification':'100M' }
-
+						'gain':1. }
 
 ax2 = ps.param()
 ax2.begin = 5.
@@ -41,16 +38,13 @@ ax2.module_options = {'dac':5,
 						'rate_stepsize':.05,
 						'rate_delay': 20.,
 						'var':'amplitude',
-						'amplification':'100M' }
+						'gain':1. }
 ax2.module = lambda x: dsgen2.set_amplitude(x)
 
 import copy
 ax3 = copy.deepcopy(ax2)
 ax3.label = 'z'
 ax3.instrument='dsgen3'
-ax3.begin = 1.
-ax3.end=4.
-ax3.stepsize=1.
 
 z = ps.param()
 z.label = 'value'
@@ -70,7 +64,9 @@ timer.module = lambda: taketime()
 ping = ps.parspace()
 ping.add_param(ax1)
 ping.add_param(ax2)
-# ping.add_param(ax3)
+
+#ping.add_param(ax3)
+
 
 ping.add_paramz(timer)
 # ping.add_paramz(z)
@@ -80,5 +76,7 @@ ping.set_traversefuncbyname('sweep',n=7,sweepback='off')
 ping.traverse()
 
 #references to objects are kept so updating them is possible without re-adding
-# ax2.end=11
-# ping.traverse()
+
+ax2.end=11
+ping.traverse()
+

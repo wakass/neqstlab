@@ -56,6 +56,8 @@ def sweep_gen(xs,**lopts):
 def sweep_gen_helper(xs,**lopts):
 	x = xs[0]
 	u = np.arange(x.begin,x.end,x.stepsize)
+	
+	u = np.linspace(x.begin,x.end,np.abs((x.end-x.begin)/x.stepsize) +1)
 	if 'flipbit' in lopts and lopts['flipbit'] == 1:
 		u = np.flipud(u)
 	if len(xs) > 1:
@@ -67,7 +69,7 @@ def sweep_gen_helper(xs,**lopts):
 	else:
 		for i in u[:-1]:
 			yield {'dp': [i], 'newblock':0}
-		yield {'dp': u[-1],'newblock':1}
+		yield {'dp': [u[-1]],'newblock':1}
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
@@ -134,19 +136,55 @@ class parspace(object):
 			self.traverse_gen = lambda xs: sweep_gen(xs,*kwargs,**lopts)
 		else:
 			raise Exception('Unknown traverse function specified')
-				
+	
+	def estimate_time(self):
+		#calculate time, try at least
+		#assume no sweepback measure2D
+		try:
+			#'loop' axis
+			ax0_time = np.abs(self.xs[-2].begin - self.xs[-2].end) / (self.xs[-2].rate_stepsize / (self.xs[-2].rate_delay/1000.))
+			ax0_steps = np.abs(self.xs[-2].begin - self.xs[-2].end) / np.abs(self.xs[-2].stepsize)
+			label= self.xs[-2].label
+			range= np.abs(self.xs[-2].begin - self.xs[-2].end)
+			speed= self.xs[-2].rate_stepsize / (self.xs[-2].rate_delay/1000.)
+			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax0_time,'steps':ax0_steps,'range':range,'speed':speed}
+
+			
+			#'sweep' axis
+			ax1_time = np.abs(self.xs[-1].begin - self.xs[-1].end) / (self.xs[-1].rate_stepsize / (self.xs[-1].rate_delay/1000.))
+			ax1_steps = np.abs(self.xs[-1].begin - self.xs[-1].end) / np.abs(self.xs[-1].stepsize)
+			label= self.xs[-1].label
+			range= np.abs(self.xs[-1].begin - self.xs[-1].end)
+			speed= self.xs[-1].rate_stepsize / (self.xs[-1].rate_delay/1000.)
+			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax1_time,'steps':ax1_steps,'range':range,'speed':speed}
+			
+			time = ax1_time*ax0_steps*2 + ax0_time
+			import datetime
+			print time
+			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
+		except Exception as e:
+			print e
 	def traverse(self):
 		#traverse the defined parameter space, using e.g. a space filling curve defined in self.traverse_func
 		instruments = []
 		for x in self.xs:
 			instr = qt.instruments.get_instruments()[x.instrument]
 			
+			
 			rate_delay = x.module_options['rate_delay']
 			rate_stepsize = x.module_options['rate_stepsize']
 			variable = x.module_options['var']
 			
+			if 'name' not in x.module_options:
+				x.module_options['name'] = ''
+			
+			if 'gain' not in x.module_options:
+				x.module_options['gain'] =1.
+
 			#transform here also according to chosen module?
+			rate_stepsize = rate_stepsize / x.module_options['gain']
 			instr.set_parameter_rate(variable,rate_stepsize,rate_delay)
+			instr.module_options = x.module_options
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
@@ -183,9 +221,12 @@ class parspace(object):
 		if len(self.xs) > 1:
 			plotvaldim = len(self.xs)
 			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
-		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10)
+		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10,autoupdate=False)
 		cnt = 0
+
 		
+
+			
 		try:
 			print self.traverse_gen(self.xs)
 			for dp in self.traverse_gen(self.xs):
@@ -194,22 +235,23 @@ class parspace(object):
 				i = dp['dp']
 
 				try:
-					for x in range(len(self.xs)):
-						functocall = getattr(instruments[x],'set_%s' % self.xs[x].module_options['var'])
-						functocall(i[x])
+					for x in range(len(self.xs)):				
+						module_options = self.xs[x].module_options
+						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
+						
+						value = i[x] / module_options['gain']
+						functocall(value)
 				except Exception as e:
-					print 'Exception caught while trying to set axes: ', e
-					
-				# if cnt == 0:
-					# qt.msleep(4) #wait 4 seconds to start measuring to allow for capacitive effects to dissipate
-					# cnt +=1
+					print 'Exception caught while trying to set axes: ', e				
 				
-				
-				allmeas = i
-				for ax in self.zs:
-					allmeas = np.hstack((allmeas,ax.module()))
-
-# 				allmeas = np.hstack((i,r))
+				if hasattr(self.zs[0],'module_options'):
+					if 'measure_wait' in self.zs[0].module_options:
+						mwait = self.zs[0].module_options['measure_wait']
+						if mwait != 0:
+							sleep(mwait)
+				r = self.zs[0].module()
+	
+				allmeas = np.hstack((i,r))
 				print allmeas
 				
 				#get keys for all dimensions
@@ -217,10 +259,9 @@ class parspace(object):
 				#write to them
 				##todo: check if dataset exceeded
 				##expand dataset every time with 100?
+				#temporarily stop writing hdf5
 				#for i in range(len(kz)):
 				#	grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
-				for i,j in enumerate(kz):
-					grp[j] = np.append(grp[j],allmeas[i])
 				
 				data.add_data_point(*allmeas)
 				#read out the control bit if it exists..
@@ -229,6 +270,8 @@ class parspace(object):
 					#fixme
 					if 'newblock' in dp and dp['newblock'] == 1:
 						data.new_block()
+						if qt.flow.get_live_update():
+							plot2d.update()
 				except Exception as e:
 					print e
 				
