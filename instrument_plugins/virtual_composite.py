@@ -114,12 +114,16 @@ class virtual_composite(Instrument):
         self.add_parameter(combined_name, **kwargs)
 
     def _get_combined(self, varname):
+	
         ret = 0
         info = self._combine_info[varname]
         for pinfo in info:
             val = pinfo['instrument'].get(pinfo['parameter'], query=False)
+            #wtf, just get the first variable
             if val is not None:
                 ret += (val + pinfo['offset']) / pinfo['scale']
+ 
+            break
 
         return ret
 
