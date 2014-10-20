@@ -72,11 +72,12 @@ ping.add_paramz(timer)
 # ping.add_paramz(z)
 
 #ping.set_traversefunc(lambda axes,**lopts: ps.sweep_func_helper(axes,datablock='on',**lopts))
-ping.set_traversefuncbyname('sweep',n=7,sweepback='off')
+ping.set_traversefuncbyname('star',n=7,sweepback='off')
 ping.traverse()
 
 #references to objects are kept so updating them is possible without re-adding
 
 ax2.end=11
+ping.estimate_time()
 ping.traverse()
 

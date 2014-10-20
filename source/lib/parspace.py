@@ -11,6 +11,10 @@ import hdf5_data as h5
 
 curve = np.zeros((0,2))
 
+class Bunch:
+    def __init__(self, **kwds):
+        self.__dict__.update(kwds)
+
 #generator version of hilbert space function
 def hilbert_it(x0, y0, xi, xj, yi, yj, n):
     if n <= 0:
@@ -52,6 +56,16 @@ def sweep_gen(xs,**lopts):
 	lopts['flipbit']=0
 	for a in sweep_gen_helper(xs,**lopts):
 		yield a
+		
+def star_gen(xs,**lopts):
+	#generates a 'star' in parspace by tracing each axis seperately.
+	#one could call it traceaxes, but meh.
+	for i,x in enumerate(xs):
+		beginnings = map(lambda x: getattr(x,'begin'),xs)
+		for a in sweep_gen_helper([x],**lopts):	
+			beginnings[i] = a['dp'][0]
+			a['dp'] = beginnings
+			yield a
 						
 def sweep_gen_helper(xs,**lopts):
 	x = xs[0]
@@ -130,35 +144,33 @@ class parspace(object):
 	def set_traversefuncbyname(self, name, *kwargs,**lopts):
 # 		if isempty(self.xs):
 # 			raise Exception('Define all your axes before choosing a traverse function')
-		if name == 'hilbert':
-			self.traverse_gen = lambda xs: hilbert_mul(xs,*kwargs,**lopts)
-		elif name == 'sweep':
-			self.traverse_gen = lambda xs: sweep_gen(xs,*kwargs,**lopts)
-		else:
+		functions = {'hilbert':	 lambda xs: hilbert_mul(xs,*kwargs,**lopts),
+					'sweep': lambda xs: sweep_gen(xs,*kwargs,**lopts),
+					'star' : lambda xs: star_gen(xs,*kwargs,**lopts)
+					}
+		try:
+			self.traverse_gen = functions[name]
+		except:
 			raise Exception('Unknown traverse function specified')
 	
 	def estimate_time(self):
 		#calculate time, try at least
 		#assume no sweepback measure2D
-		try:
-			#'loop' axis
-			ax0_time = np.abs(self.xs[-2].begin - self.xs[-2].end) / (self.xs[-2].rate_stepsize / (self.xs[-2].rate_delay/1000.))
-			ax0_steps = np.abs(self.xs[-2].begin - self.xs[-2].end) / np.abs(self.xs[-2].stepsize)
-			label= self.xs[-2].label
-			range= np.abs(self.xs[-2].begin - self.xs[-2].end)
-			speed= self.xs[-2].rate_stepsize / (self.xs[-2].rate_delay/1000.)
-			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax0_time,'steps':ax0_steps,'range':range,'speed':speed}
-
+		try:		
+			axes = []
+			for i in range(-2,0): #loop and sweep axis consecutively
+				ax = self.xs[i]
+				mod = ax.module_options
+				x = {}
+				x['time']  = np.abs(ax.begin - ax.end) / (mod['rate_stepsize'] / (mod['rate_delay']/1000.))
+				x['steps'] = np.abs(ax.begin - ax.end) / np.abs(ax.stepsize)
+				x['label'] = ax.label
+				x['range'] = np.abs(ax.begin - ax.end)
+				x['speed'] = mod['rate_stepsize'] / (mod['rate_delay']/1000.)
+				print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % x
+				axes.append(x)
 			
-			#'sweep' axis
-			ax1_time = np.abs(self.xs[-1].begin - self.xs[-1].end) / (self.xs[-1].rate_stepsize / (self.xs[-1].rate_delay/1000.))
-			ax1_steps = np.abs(self.xs[-1].begin - self.xs[-1].end) / np.abs(self.xs[-1].stepsize)
-			label= self.xs[-1].label
-			range= np.abs(self.xs[-1].begin - self.xs[-1].end)
-			speed= self.xs[-1].rate_stepsize / (self.xs[-1].rate_delay/1000.)
-			print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % {'label':label,'time':ax1_time,'steps':ax1_steps,'range':range,'speed':speed}
-			
-			time = ax1_time*ax0_steps*2 + ax0_time
+			time = axes[0]['time']*axes[0]['steps']*2 + axes[0]['time']
 			import datetime
 			print time
 			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
@@ -293,3 +305,4 @@ class parspace(object):
 		
 		qt.mend()
 		print 'measurement ended'
+		
