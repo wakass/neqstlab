@@ -2,8 +2,14 @@
 
 basedir=`dirname $0`
 
-if type -p ipython; then
+if type -p ipython2; then
+    _ipython=ipython2
+    isexplicitpython2=true
+    echo "Found iPython2 executable"
+elif type -p ipython; then
     _ipython=ipython
+    isexplicitpython2=false
+    echo "Found iPython executable, hopefully using Python2"
 else
     echo "no ipython executable found in PATH"
 fi
@@ -13,10 +19,12 @@ if [[ "$_ipython" ]]; then
     # Old ipython versions have -Version argument in stead of --version.
     # Determine from the length of the return string if the help-text
     # is returned instead of the version number.
-    if [[ {#$version} > 10 ]]; then
+    if [[ ${#version} -gt 10 ]]; then
         version=$("$_ipython" -Version)
     fi
-    if [[ "$version" < "0.11" ]]; then
+    if [[ isexplicitpython2 ]]; then
+        ipython2 --gui=gtk -i $basedir/source/qtlab_shell.py -- "$@"
+    elif [[ "$version" -lt "0.11" ]]; then
         ipython -gthread $basedir/source/qtlab_shell.py -- "$@"
     else
         ipython --gui=gtk -i $basedir/source/qtlab_shell.py -- "$@"

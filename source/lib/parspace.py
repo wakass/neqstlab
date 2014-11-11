@@ -110,6 +110,7 @@ class parspace(object):
 		self.xs = [] #empty list of x1,x2 ..xn (param objects)
 		self.zs = [] #empty list of parmaham space
 		self.measurementname = 'Noname Measurement'
+		self.user = None
 		
 	def load_xml(self,filename):
 		raise Exception('not implemented yet. Filename: {:<30}'.format(filename))
@@ -228,7 +229,7 @@ class parspace(object):
 			data.add_value('{%s} ({%s})' % (i.label,i.unit))
 			grp.add_value('Z%d' % cnt, label=i.label,unit=i.unit)
 			
-		data.create_file()
+		data.create_file(user=self.user)
         
 		plotvaldim = len(self.xs)
 		if plotvaldim > 1:

@@ -1,4 +1,10 @@
 #!/bin/bash
 
 basedir=`dirname $0`
-python $basedir/clients/client_gtk.py --module gui_client --config gui_client.cfg "$@"
+if type -p ipython2; then
+    echo 'running GUI in explicit Python 2'
+    python2 $basedir/clients/client_gtk.py --module gui_client --config gui_client.cfg "$@"
+else
+    echo 'running GUI in not explicitly versioned Python'
+    python $basedir/clients/client_gtk.py --module gui_client --config gui_client.cfg "$@"
+fi

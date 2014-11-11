@@ -77,10 +77,18 @@ class DateTimeGenerator:
 
         return path
 
-    def new_filename(self, data_obj):
+    def new_filename(self, data_obj, user=None):
         '''Return a new filename, based on name and timestamp.'''
 
-        dir = self.create_data_dir(config['datadir'], name=data_obj._name,
+        datadir = config['datadir']
+        if user is None:
+        	user = config.get('user')
+        if user is not None and user != '':
+            if datadir[-1] == '/':
+                datadir += user + '/'
+            else:
+                datadir += '/' + user
+        dir = self.create_data_dir(datadir, name=data_obj._name,
                 ts=data_obj._localtime)
         tstr = time.strftime('%H%M%S', data_obj._localtime)
         filename = '%s_%s.dat' % (tstr, data_obj._name)
@@ -560,7 +568,8 @@ class Data(SharedGObject):
 
 ### File writing
 
-    def create_file(self, name=None, filepath=None, settings_file=True):
+    def create_file(self, name=None, filepath=None, settings_file=True,
+            user=None):
         '''
         Create a new data file and leave it open. In addition a
         settings file is generated, unless settings_file=False is
@@ -574,7 +583,7 @@ class Data(SharedGObject):
             name = self._name
 
         if filepath is None:
-            filepath = self._filename_generator.new_filename(self)
+            filepath = self._filename_generator.new_filename(self, user)
 
         self._dir, self._filename = os.path.split(filepath)
         if not os.path.isdir(self._dir):
