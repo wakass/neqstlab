@@ -31,8 +31,9 @@ from gettext import gettext as _L
 
 from lib import namedlist, temp
 from lib.misc import dict_to_ordered_tuples, get_arg_type
-from lib.config import get_config
+from lib.config import get_config, get_shared_config
 config = get_config()
+shared_config = get_shared_config()
 in_qtlab = config.get('qtlab', False)
 from lib.network.object_sharer import SharedGObject, cache_result
 
@@ -82,7 +83,7 @@ class DateTimeGenerator:
 
         datadir = config['datadir']
         if user is None:
-        	user = config.get('user')
+        	user = shared_config.get('user')
         if user is not None and user != '':
             if datadir[-1] == '/':
                 datadir += user + '/'

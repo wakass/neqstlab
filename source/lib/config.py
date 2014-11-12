@@ -27,6 +27,8 @@ except:
 
 import logging
 
+_QTLAB_SHARED_CONFIG_FILENAME = 'qtlab_shared.cfg'
+
 class Config(gobject.GObject):
     '''
     Class to manage settings for the QTLab environment.
@@ -186,6 +188,28 @@ class Config(gobject.GObject):
     def get_all(self):
         return self._config
 
+class SharedConfig(Config):
+    '''
+    Modified Config class which always reloads its configuration before
+    getting or setting any property and always saves its configuration
+    after setting a property, thereby reducing conflicts if the same
+    config file is used by multiple runtimes.
+    
+    Future implementations may include a lockfile to eliminate these
+    conflicts altogether, although the need for this is not very high
+    since most - if not all - configuration changes are user-triggered
+    and therefore very unlikely to happen (near-)simultaneously.
+    '''
+    def set(self, key, val):
+        self.load()
+        self._config[key] = val
+        self.save()
+        self.emit('changed', {key: val})
+    
+    def get(self, key, default=None):
+        self.load()
+        return Config.get(self, key, default)
+
 def get_config():
     '''Get configuration object.'''
     global _config
@@ -195,7 +219,15 @@ def get_config():
         _config = create_config(fname)
     return _config
 
+def get_shared_config():
+    '''Get shared configuration object.'''
+    global _shared_config
+    if _shared_config is None:
+        _shared_config = SharedConfig(_QTLAB_SHARED_CONFIG_FILENAME)
+    return _shared_config
+
 _config = None
+_shared_config = None
 
 def create_config(filename):
     global _config

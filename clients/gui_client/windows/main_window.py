@@ -22,6 +22,7 @@ import logging
 
 import lib.gui as gui
 from lib.gui import qtwindow, stopbutton, orderedbox
+from lib.config import get_config, get_shared_config
 
 import qtclient as qt
 
@@ -56,6 +57,22 @@ class MainWindow(qtwindow.QTWindow):
         ]
 #        self.menu = gui.build_menu(menu)
 
+        self._userfield = gtk.ComboBoxEntry()
+        self._userfield.connect('changed', self._user_changed)
+        self._userfield.child.connect('activate', self._save_user)
+        # TODO read default user from config and put name in here
+        # TODO perhaps populate combobox with known users and provide
+        # mechanism for adding new known user
+        
+        self._userlbl = gtk.Label('{:s}:'.format(_L('user')))
+        self._userbtn = gtk.Button(_L('OK'))
+        self._userbtn.set_sensitive(False)
+        self._userbtn.connect('clicked', self._save_user)
+        self._userhbox = gtk.HBox(spacing=2)
+        self._userhbox.pack_start(self._userlbl, expand=False)
+        self._userhbox.pack_start(self._userfield)
+        self._userhbox.pack_start(self._userbtn, expand=False)
+        
         self._liveplot_but = gtk.ToggleButton(_L('Live Plotting'))
         self._liveplot_but.set_active(qt.flow.get_live_plot())
         self._liveplot_but.connect('clicked', self._toggle_liveplot_cb)
@@ -69,6 +86,7 @@ class MainWindow(qtwindow.QTWindow):
         vbox.add(self._replot_but, 11, False)
         vbox.add(self._stop_but, 12, False)
         vbox.add(self._pause_but, 13, True)
+        vbox.add(self._userhbox)
         self._vbox = vbox
         self.add(self._vbox)
 
@@ -169,6 +187,14 @@ in the QTLab folder.
 
     def _toggle_replot_cb(self, widget):
         qt.replot_all()
+    
+    def _user_changed(self, widget):
+        self._userbtn.set_sensitive(True)
+    
+    def _save_user(self, widget):
+        get_shared_config().set(
+                'user', self._userfield.get_active_text())
+        self._userbtn.set_sensitive(False)
 
 Window = MainWindow
 
