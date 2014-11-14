@@ -67,7 +67,7 @@ class MainWindow(qtwindow.QTWindow):
         prevuser = get_shared_config().get('user')
         self._userfield.child.set_text(prevuser)
         if not self._user_in_cb(prevuser):
-            self.add_user_cb_row(prevuser)
+            self._add_user_cb_row(prevuser)
         self._userfield.connect('changed', self._user_changed)
         self._userfield.child.connect('activate', self._save_user)
         
@@ -223,11 +223,15 @@ in the QTLab folder.
         datadir = get_read_only_config('qtlab').get('datadir')
         if datadir[-1] != '/' and datadir[-1] != '\\':
             datadir += '/'
-        dirs = os.listdir(datadir)
-        for name in dirs:
-            if (re.match(nouser_regex, name) is None and
-                    os.path.isdir(datadir + name)):
-                self._add_user_cb_row(name)
+        if os.path.isdir(datadir):
+           dirs = os.listdir(datadir)
+           for name in dirs:
+               if (re.match(nouser_regex, name) is None and
+                       os.path.isdir(datadir + name)):
+                   self._add_user_cb_row(name)
+        else:
+            logging.error('Couldn\'t open data dir %s'% datadir)
+
 
 Window = MainWindow
 
