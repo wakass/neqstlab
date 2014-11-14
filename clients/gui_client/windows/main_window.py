@@ -19,12 +19,16 @@ import gtk
 import sys
 from gettext import gettext as _L
 import logging
+import re
+import os
 
 import lib.gui as gui
 from lib.gui import qtwindow, stopbutton, orderedbox
-from lib.config import get_config, get_shared_config
+from lib.config import get_config, get_shared_config, get_read_only_config
 
 import qtclient as qt
+
+nouser_regex = re.compile('^[0-9]{8}[0-9]*$')
 
 class MainWindow(qtwindow.QTWindow):
 
@@ -57,12 +61,15 @@ class MainWindow(qtwindow.QTWindow):
         ]
 #        self.menu = gui.build_menu(menu)
 
-        self._userfield = gtk.ComboBoxEntry()
+        self._userlist = gtk.ListStore(str)
+        self._populate_user_cb()
+        self._userfield = gtk.ComboBoxEntry(self._userlist, 0)
+        prevuser = get_shared_config().get('user')
+        self._userfield.child.set_text(prevuser)
+        if not self._user_in_cb(prevuser):
+            self.add_user_cb_row(prevuser)
         self._userfield.connect('changed', self._user_changed)
         self._userfield.child.connect('activate', self._save_user)
-        # TODO read default user from config and put name in here
-        # TODO perhaps populate combobox with known users and provide
-        # mechanism for adding new known user
         
         self._userlbl = gtk.Label('{:s}:'.format(_L('user')))
         self._userbtn = gtk.Button(_L('OK'))
@@ -82,11 +89,11 @@ class MainWindow(qtwindow.QTWindow):
         self._pause_but = stopbutton.PauseButton()
 
         vbox = gui.orderedbox.OrderedVBox()
+        vbox.add(self._userhbox, 1, False)
         vbox.add(self._liveplot_but, 10, False)
         vbox.add(self._replot_but, 11, False)
         vbox.add(self._stop_but, 12, False)
         vbox.add(self._pause_but, 13, True)
-        vbox.add(self._userhbox)
         self._vbox = vbox
         self.add(self._vbox)
 
@@ -192,9 +199,35 @@ in the QTLab folder.
         self._userbtn.set_sensitive(True)
     
     def _save_user(self, widget):
-        get_shared_config().set(
-                'user', self._userfield.get_active_text())
+        user = self._userfield.get_active_text()
+        get_shared_config().set('user', user)
         self._userbtn.set_sensitive(False)
+        if not self._user_in_cb(user):
+            self._add_user_cb_row(user)
+    
+    def _user_in_cb(self, name):
+        i = self._userlist.get_iter_first()
+        while i is not None:
+            if self._userlist.get_value(i, 0) == name:
+                return True
+            i = self._userlist.iter_next(i)
+        return False
+    
+    def _add_user_cb_row(self, name):
+        row_iter = self._userlist.append()
+        self._userlist.set_value(row_iter, 0, name)
+    
+    def _populate_user_cb(self):
+        '''Refresh the list of users who have measured before.'''
+        self._userlist.clear()
+        datadir = get_read_only_config('qtlab').get('datadir')
+        if datadir[-1] != '/' and datadir[-1] != '\\':
+            datadir += '/'
+        dirs = os.listdir(datadir)
+        for name in dirs:
+            if (re.match(nouser_regex, name) is None and
+                    os.path.isdir(datadir + name)):
+                self._add_user_cb_row(name)
 
 Window = MainWindow
 
