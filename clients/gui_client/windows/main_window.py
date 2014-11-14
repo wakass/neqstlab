@@ -89,7 +89,7 @@ class MainWindow(qtwindow.QTWindow):
         self._pause_but = stopbutton.PauseButton()
 
         vbox = gui.orderedbox.OrderedVBox()
-        vbox.add(self._userhbox, 1)
+        vbox.add(self._userhbox, 1, False)
         vbox.add(self._liveplot_but, 10, False)
         vbox.add(self._replot_but, 11, False)
         vbox.add(self._stop_but, 12, False)
