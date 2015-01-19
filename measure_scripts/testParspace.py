@@ -2,6 +2,8 @@
 #eefje = qt.instruments.create('Eefje','IVVI',address='COM1')
 #elKeef = qt.instruments.create('ElKeefLy','Keithley_2000',address='GPIB::17')
 
+import qt
+
 dsgen1 = qt.instruments.create('dsgen1', 'dummy_signal_generator')
 dsgen2 = qt.instruments.create('dsgen2', 'dummy_signal_generator')
 dsgen3 = qt.instruments.create('dsgen3', 'dummy_signal_generator')
