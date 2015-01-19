@@ -27,6 +27,8 @@ except:
 
 import logging
 
+_QTLAB_SHARED_CONFIG_FILENAME = 'qtlab_shared.cfg'
+
 class Config(gobject.GObject):
     '''
     Class to manage settings for the QTLab environment.
@@ -186,6 +188,93 @@ class Config(gobject.GObject):
     def get_all(self):
         return self._config
 
+class ReadOnlyConfig:
+    '''
+    Class to read settings for the QTLab environment.
+    '''
+
+    __gsignals__ = {
+        'changed': (gobject.SIGNAL_RUN_FIRST,
+                    gobject.TYPE_NONE,
+                    ([gobject.TYPE_PYOBJECT])),
+    }
+
+    def __init__(self, filename):
+        self._filename = filename
+        self._config = {}
+        self._defaults = {}
+        self._save_hid = None
+
+        self.load_defaults()
+        self.load()
+
+        # Override exec dir
+        self._config['execdir'] = get_execdir()
+
+    def _get_filename(self):
+        return os.path.join(get_execdir(), self._filename)
+
+    def load_defaults(self):
+        self._defaults['datadir'] = os.path.join(get_execdir(), 'data')
+
+    def load(self):
+        '''
+        Load settings.
+        '''
+        try:
+            filename = self._get_filename()
+            logging.debug('Loading settings from %s', filename)
+            f = file(self._get_filename(), 'r')
+            self._config = json.load(f)
+            f.close()
+        except Exception, e:
+            logging.warning('Unable to load config file')
+            self._config = {}
+
+    def get(self, key, default=None):
+        '''
+        Get configuration variable. If it is not defined, return the default
+        value.
+
+        Input:
+            key (string): variable name
+            default (any type): default variable value
+
+        Output:
+            None
+        '''
+
+        if key in self._config:
+            return self._config[key]
+        elif default is not None:
+            return default
+        elif key in self._defaults:
+            return self._defaults[key]
+        else:
+            return None
+
+class SharedConfig(Config):
+    '''
+    Modified Config class which always reloads its configuration before
+    getting or setting any property and always saves its configuration
+    after setting a property, thereby reducing conflicts if the same
+    config file is used by multiple runtimes.
+    
+    Future implementations may include a lockfile to eliminate these
+    conflicts altogether, although the need for this is not very high
+    since most - if not all - configuration changes are user-triggered
+    and therefore very unlikely to happen (near-)simultaneously.
+    '''
+    def set(self, key, val):
+        self.load()
+        self._config[key] = val
+        self.save()
+        self.emit('changed', {key: val})
+    
+    def get(self, key, default=None):
+        self.load()
+        return Config.get(self, key, default)
+
 def get_config():
     '''Get configuration object.'''
     global _config
@@ -195,12 +284,29 @@ def get_config():
         _config = create_config(fname)
     return _config
 
+def get_shared_config():
+    '''Get shared configuration object.'''
+    global _shared_config
+    if _shared_config is None:
+        _shared_config = SharedConfig(_QTLAB_SHARED_CONFIG_FILENAME)
+    return _shared_config
+
 _config = None
+_shared_config = None
+_read_only_configs = {}
 
 def create_config(filename):
     global _config
     _config = Config(filename)
     return _config
+
+def get_read_only_config(name):
+    global _read_only_configs
+    if name[-4:] == '.cfg':
+        name = name[:-4]
+    if name not in _read_only_configs:
+        _read_only_configs[name] = ReadOnlyConfig(name + '.cfg')
+    return _read_only_configs[name]
 
 _execdir = os.getcwd()
 

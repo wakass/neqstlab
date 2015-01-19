@@ -31,8 +31,9 @@ from gettext import gettext as _L
 
 from lib import namedlist, temp
 from lib.misc import dict_to_ordered_tuples, get_arg_type
-from lib.config import get_config
+from lib.config import get_config, get_shared_config
 config = get_config()
+shared_config = get_shared_config()
 in_qtlab = config.get('qtlab', False)
 from lib.network.object_sharer import SharedGObject, cache_result
 
@@ -77,10 +78,18 @@ class DateTimeGenerator:
 
         return path
 
-    def new_filename(self, data_obj):
+    def new_filename(self, data_obj, user=None):
         '''Return a new filename, based on name and timestamp.'''
 
-        dir = self.create_data_dir(config['datadir'], name=data_obj._name,
+        datadir = config['datadir']
+        if user is None:
+        	user = shared_config.get('user')
+        if user is not None and user != '':
+            if datadir[-1] == '/':
+                datadir += user + '/'
+            else:
+                datadir += '/' + user
+        dir = self.create_data_dir(datadir, name=data_obj._name,
                 ts=data_obj._localtime)
         tstr = time.strftime('%H%M%S', data_obj._localtime)
         filename = '%s_%s.dat' % (tstr, data_obj._name)
@@ -560,7 +569,8 @@ class Data(SharedGObject):
 
 ### File writing
 
-    def create_file(self, name=None, filepath=None, settings_file=True):
+    def create_file(self, name=None, filepath=None, settings_file=True,
+            user=None):
         '''
         Create a new data file and leave it open. In addition a
         settings file is generated, unless settings_file=False is
@@ -574,7 +584,7 @@ class Data(SharedGObject):
             name = self._name
 
         if filepath is None:
-            filepath = self._filename_generator.new_filename(self)
+            filepath = self._filename_generator.new_filename(self, user)
 
         self._dir, self._filename = os.path.split(filepath)
         if not os.path.isdir(self._dir):
