@@ -65,6 +65,8 @@ class MainWindow(qtwindow.QTWindow):
         self._populate_user_cb()
         self._userfield = gtk.ComboBoxEntry(self._userlist, 0)
         prevuser = get_shared_config().get('user')
+        if prevuser == None:
+        	prevuser = 'default'
         self._userfield.child.set_text(prevuser)
         if not self._user_in_cb(prevuser):
             self._add_user_cb_row(prevuser)
