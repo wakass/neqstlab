@@ -249,10 +249,39 @@ class parspace(object):
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
-						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						
+							
+							
+						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
+						instr = instruments[x]
 						value = i[x] / module_options['gain']
-						functocall(value)
+						
+						if 'setalways' in module_options and module_options['setalways'] == 0:
+							if 'newblock' in dp and dp['newblock'] == 1:
+								functocall(value)
+								
+								#after setting of variable call another function
+								#maybe check for a list of variables in the future? in the var option
+								if 'postcall' in module_options:
+									(var,value) = module_options['postcall']
+									func =getattr(instr,'set_%s'%var)
+									func(value)
+								
+								#check for hold options
+								if 'readywhen' in module_options:
+									checkvar = module_options['readywhen']
+									(var,value) = checkvar
+									print var
+									print value
+									func = getattr(instr,'get_%s'%var)
+									while func() != value:
+										#print 'polling'
+										#print func()
+										sleep(1)
+						else:
+							functocall(value)
+						
+						
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e				
 				
