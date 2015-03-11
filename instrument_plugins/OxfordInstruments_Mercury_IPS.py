@@ -48,6 +48,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
     def __del__(self):
         print 'indel'
         try:
+            print 'being delled'
             self._visainstrument.close()
         except:
             pass
@@ -73,7 +74,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
 
 
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = visa.instrument(self._address,timeout=20)
         self._values = {}
         self._visainstrument.term_chars = '\r\n'
 
@@ -108,7 +109,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             channels=('X', 'Y', 'Z'))
         
-        self.add_parameter('target_vector', type=types.StringType,
+        self.add_parameter('target_vector', type=types.FloatType,
             #READ:SYS:VRM:TVEC
             flags=Instrument.FLAG_GETSET,
             channels=('X', 'Y', 'Z'))
@@ -128,18 +129,21 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         
         #magnet setpoints
         #READ:SYS:VRM:VSET
-        self.add_parameter('setpoint', type=types.IntType,
-            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET)
+        #self.add_parameter('setpoint', type=types.FloatType,
+        #    flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET)
             
 
-        self.add_parameter('activity', type=types.IntType,
+        self.add_parameter('activity', type=types.StringType,
             #READ:SYS:VRM:ACTN 
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             format_map = {
-            0 : "Hold",
-            1 : "To set point",
-            2 : "To zero",
-            4 : "Clamped"})
+            'RTOS' : "Sweep to setpoint",
+            'RTOZ' : "Sweep to zero",
+            'HOLD' : "Hold",
+            'IDLE' : 'Idle',
+            'PERS' : 'Make persistent',
+            'NPERS': 'Make non-persistent',
+            'SAFE' : "Safe"})
             
 
 
@@ -159,13 +163,20 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             None
         '''
         logging.info(__name__ + ' : reading all settings from instrument')
-        #self.get_coordinatesys()
+        self.get_coordinatesys()
         #self.get_vector()
         self.get_target_vectorX()
+        self.get_target_vectorY()
+        self.get_target_vectorZ()
+        self.get_vectorX()
+        self.get_vectorY()
+        self.get_vectorZ()
+        
+        
         # self.get_max_field_sweep()
         # self.get_sweep_mode()
         # self.get_setpoint()
-        # self.get_activity()
+        self.get_activity()
         # self.get_mode()
         # self.get_activity()
 
@@ -182,7 +193,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             None
         '''
         logging.info(__name__ + ' : Send the following command to the device: %s' % message)
-        print __name__ + ' : Send the following command to the device: %s' % message
+        #print __name__ + ' : Send the following command to the device: %s' % message
         #self._visainstrument.write('@%s%s' % (self._number, message))
         #sleep(20e-3) # wait for the device to be able to respond
         #result = self._visainstrument.read()
@@ -270,8 +281,8 @@ class OxfordInstruments_Mercury_IPS(Instrument):
      
     def do_get_vector(self,channel):
         logging.info(__name__ + ' : Read current coordinate system')
-        result = self._execute('READ:SYS:VRM:VEC')
-        parsed = (result.replace('STAT:SYS:VRM:VEC:',''))
+        result = self._execute('READ:SYS:VRM:VECT')
+        parsed = (result.replace('STAT:SYS:VRM:VECT:',''))
         found = None
         if self.do_get_coordinatesys() == 'CART':
             tesla = re.compile(r'^\[(.*)T (.*)T (.*)T\]$')
@@ -282,6 +293,8 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         #[0.0000T 0.00000rad 0.0000T]
         #r theta phi, spherical 
         #[0.0000T 0.00000rad 0.00000rad]
+        
+
         print found
         if channel=='X':
             return found[0][0]
@@ -306,6 +319,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         #[0.0000T 0.00000rad 0.0000T]
         #r theta phi, spherical 
         #[0.0000T 0.00000rad 0.00000rad]
+        
         print found
         if channel=='X':
             return found[0][0]
@@ -323,13 +337,13 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         result = self._execute('READ:SYS:VRM:RVST:MODE')
         return (result.replace('STAT:SYS:VRM:RVST:MODE:',''))
     def do_get_setpoint(self):
-        logging.info(__name__ + ' : Read current coordinate system')
+        logging.info(__name__ + ' : Read setpoint')
         result = self._execute('READ:SYS:VRM:VSET')
         return (result.replace('STAT:SYS:VRM:VSET:',''))        
     def do_get_activity(self):
-        logging.info(__name__ + ' : Read current coordinate system')
+        logging.info(__name__ + ' : Read activity of magnet')
         result = self._execute('READ:SYS:VRM:ACTN')
-        return (result.replace('STAT:SYS:VRM:ACTN',''))
+        return (result.replace('STAT:SYS:VRM:ACTN:',''))
     # def do_set_(self):
         # logging.info(__name__ + ' : Set ')
         # result = self._execute('')
@@ -344,12 +358,43 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         return (result.replace('SET:SYS:VRM:VECT:',''))
     def do_set_setpoint(self,val):
         logging.info(__name__ + ' : Set ')
-        result = self._execute('SET:SYS:VRM:VSET:%s' % val)
+        mode = 'RATE'
+        rate = 0.2
+        tesla = val
+        print tesla
+        command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[0 0 %.3f]'%(mode,rate,tesla)
+
+        result = self._execute(command)
+        print result
+        
         return (result.replace('SET:SYS:VRM:VSET:',''))
     def do_set_activity(self,val):
         logging.info(__name__ + ' : Set ')
         result = self._execute('SET:SYS:VRM:ACTN:%s' % val)
         return (result.replace('STAT:SET:SYS:VRM:ACTN:',''))
+    
+    def do_set_target_vector(self,val,channel):
+        logging.info(__name__ + ' : Read current coordinate system')
+        
+        
+        command=[]
+        mode = 'RATE'
+        rate =0.2
+
+        #x = self.get_target_vectorX()
+        #y = self.get_target_vectorY()
+        #z = self.get_target_vectorZ()
+        x=0
+        y=0
+        if channel=='X':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,y,z)
+        if channel=='Y':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,val,z)
+        if channel=='Z':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,y,val)
+            
+        result = self._execute(command)
+       # print result
     
 	# def get_changed(self):
         # print "Current: "

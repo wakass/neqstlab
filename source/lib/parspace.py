@@ -7,7 +7,7 @@ import numpy as np
 from time import time,sleep
 import os
 import qt
-import hdf5_data as h5
+#import hdf5_data as h5
 
 curve = np.zeros((0,2))
 
@@ -109,6 +109,34 @@ def sweep_gen_helper(xs,**lopts):
 		#and for each 'real' sweep (end of xs)
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
+
+
+def createCombinedFromAxes(axes):
+	combined = qt.instruments.create('combined','virtual_composite')
+	tocombine=axes
+	master=None
+	res=[]
+	for i,p in enumerate(tocombine):
+		if i == 0:
+			master = p
+			a= {
+				'instrument': qt.instruments.get_instruments()[p.instrument],
+				'parameter': p.module_options['var'],
+				'scale': 1.,
+				'offset': 0}
+		else:
+			scale = (p.begin - p.end) / (master.begin - master.end)
+			offset = p.begin - scale*master.begin
+			a= {
+				'instrument': qt.instruments.get_instruments()[p.instrument],
+				'parameter': p.module_options['var'],
+				'scale': scale,
+				'offset': -offset}
+				
+		res.append(a)
+# 	print res
+	combined.add_variable_combined('test',res)	
+	return combined
 			
 class param(object):
 	def __init__(self):
@@ -245,9 +273,9 @@ class parspace(object):
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
-		dat = h5.HDF5Data(name=self.measurementname)
-		grp = h5.DataGroup('my_data', dat, description='pretty wise',
-			greets_from='WakA') # arbitrary metadata as kw
+		#dat = h5.HDF5Data(name=self.measurementname)
+	# 	grp = h5.DataGroup('my_data', dat, description='pretty wise',
+# 			greets_from='WakA') # arbitrary metadata as kw
 
 		qt.mstart()
 		
@@ -259,18 +287,18 @@ class parspace(object):
 				start=i.begin,
 				end=i.end
 				)
-			grp.add_coordinate('X%d' % cnt, #keep track of the nth coordinate
-				label=i.label,
-				unit=i.unit,
-				size=abs((i.end - i.begin) / i.stepsize),
-				start=i.begin,
-				end=i.end
-				)
+# 			grp.add_coordinate('X%d' % cnt, #keep track of the nth coordinate
+# 				label=i.label,
+# 				unit=i.unit,
+# 				size=abs((i.end - i.begin) / i.stepsize),
+# 				start=i.begin,
+# 				end=i.end
+# 				)
 		cnt=0
 		for i in self.zs:
 			cnt+=1
 			data.add_value('{%s} ({%s})' % (i.label,i.unit))
-			grp.add_value('Z%d' % cnt, label=i.label,unit=i.unit)
+# 			grp.add_value('Z%d' % cnt, label=i.label,unit=i.unit)
 			
 		data.create_file(user=self.user)
         
@@ -293,10 +321,39 @@ class parspace(object):
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
-						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						
+							
+							
+						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
+						instr = instruments[x]
 						value = i[x] / module_options['gain']
-						functocall(value)
+						
+						if 'setalways' in module_options and module_options['setalways'] == 0:
+							if 'newblock' in dp and dp['newblock'] == 1:
+								functocall(value)
+								
+								#after setting of variable call another function
+								#maybe check for a list of variables in the future? in the var option
+								if 'postcall' in module_options:
+									(var,value) = module_options['postcall']
+									func =getattr(instr,'set_%s'%var)
+									func(value)
+								
+								#check for hold options
+								if 'readywhen' in module_options:
+									checkvar = module_options['readywhen']
+									(var,value) = checkvar
+									print var
+									print value
+									func = getattr(instr,'get_%s'%var)
+									while func() != value:
+										#print 'polling'
+										#print func()
+										sleep(1)
+						else:
+							functocall(value)
+						
+						
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e				
 				
@@ -311,7 +368,7 @@ class parspace(object):
 				print allmeas
 				
 				#get keys for all dimensions
-				kz = grp.group.keys()
+# 				kz = grp.group.keys()
 				#write to them
 				##todo: check if dataset exceeded
 				##expand dataset every time with 100?
@@ -343,7 +400,7 @@ class parspace(object):
 
 
 		data.close_file()
-		dat.close()
+# 		dat.close()
 		from lib.file_support.spyview import SpyView
 		SpyView(data).write_meta_file()
 		

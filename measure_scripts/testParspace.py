@@ -8,6 +8,8 @@ dsgen1 = qt.instruments.create('dsgen1', 'dummy_signal_generator')
 dsgen2 = qt.instruments.create('dsgen2', 'dummy_signal_generator')
 dsgen3 = qt.instruments.create('dsgen3', 'dummy_signal_generator')
 
+
+
 import lib.parspace as ps
 reload(ps)
 from math import sin
@@ -22,7 +24,7 @@ ax1.instrument = 'dsgen1'
 ax1.label = 'x'
 ax1.module_options = {'dac':5, 
 						'name':'s1f',
-						'rate_stepsize':.5,
+						'rate_stepsize':5.,
 						'rate_delay': 10.,
 						'var':'amplitude',
 						'gain':1. }
@@ -37,7 +39,7 @@ ax2.rate_delay = 20.
 ax2.instrument = 'dsgen2'
 ax2.module_name = 's1f'#'dac','s1c'
 ax2.module_options = {'dac':5, 
-						'rate_stepsize':.05,
+						'rate_stepsize':5.,
 						'rate_delay': 20.,
 						'var':'amplitude',
 						'gain':1. }
@@ -47,6 +49,9 @@ import copy
 ax3 = copy.deepcopy(ax2)
 ax3.label = 'z'
 ax3.instrument='dsgen3'
+
+
+
 
 z = ps.param()
 z.label = 'value'
@@ -75,11 +80,11 @@ ping.add_paramz(timer)
 
 #ping.set_traversefunc(lambda axes,**lopts: ps.sweep_func_helper(axes,datablock='on',**lopts))
 ping.set_traversefuncbyname('star',n=7,sweepback='off')
-ping.traverse()
+#ping.traverse()
 
 #references to objects are kept so updating them is possible without re-adding
 
 ax2.end=11
 ping.estimate_time()
-ping.traverse()
+#ping.traverse()
 
