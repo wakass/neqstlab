@@ -4,10 +4,9 @@
 #   Keithley_199.py driver for Keithley 199 DMM
 #   Reinier Heeres <reinier@heeres.eu>, 2009
 #
-# Most stuff also works for Keithley 237 and 238 but some parameter
-# values represent slightly different numerical values for real
-# parameters, this is indicated with comments. Refer to the Keithley
-# 236,237,238 User Manual for further details:
+# Most stuff also works for Keithley 237 and 238 but there are some
+# slight differences, this is indicated with comments. Refer to the
+# Keithley 236,237,238 User Manual for further details:
 # http://www.download-service-manuals.com/download.php?file=Keithley-3526.pdf&SID=fp799cqduhurj3gh6rgsjr1ac5
 # Section 3.6 of that document is of particular interest.
 #
@@ -16,6 +15,7 @@
 # * Calibration (C)
 # * Display (D)
 # * IEEE Immediate Trigger (H0X)
+#   (although this one is used in read() under certain conditions)
 # * EOI and Bus Hold-off (K)
 # * SRQ (service request) Mask and Serial Poll Byte (M)
 # * Output Sense (local or remote sensing) (O)
@@ -48,6 +48,8 @@
 from instrument import Instrument
 import types
 import visa
+import numpy
+import re
 
 # Some ENUMs
 ############
@@ -60,6 +62,46 @@ OUTPUT_FORMATS = {
 	'binary_HP': 3,
 	'binary_IBM': 4 }
 OUTPUT_LINES = { 'onesample': 0, 'onesweep': 1, 'allsweeps': 2 }
+
+# Multi-use option maps
+OPTMAP_RANGE = {
+	0: 'auto',
+	1: '1.1V / 1nA', # 1.5V for Keithley 238
+	2: '11V / 10nA', # 15V for Keithley 238
+	3: '110V / 100nA',
+	4: '1uA', # Also 1.1kV for Keithley 237
+	5: '10uA',
+	6: '100uA',
+	7: '1mA',
+	8: '10mA',
+	9: '100mA' }
+	# 10 = 1A for Keithley 238
+
+# Regular expressions
+#####################
+_REGEX_STATUS3 = re.compile('MSTG(0\d|1[1-5]),([0-4]),([0-2])'
+		'K([0-3])M([01]\d{2}),([01])N([01])R([01])'
+		'T([0-4]),([0-8]),([0-8]),([01])V([01])Y([0-4])')
+_REGEX_STATUS4 = re.compile('[IV]MPL,(0\d|10)F([01]),([01])'
+		'O([01])P([0-5])S([0-3])W([01])Z([01])')
+
+def _interpret_status3(s):
+	'''((G1,G2,G3), K, (M1,M2), N, R, (T1,T2,T3,T4), V, Y)'''
+	try:
+		m = tuple([int(i) for i in re.match(_REGEX_STATUS3, s).groups()])
+		return (m[:3], m[3], m[4:6], m[6], m[7], m[8:12], m[12], m[13])
+	except Exception as e:
+		e.args = ('Got invalid status(3) string \'{:s}\''.format(s),) + e.args
+		raise
+
+def _interpret_status4(s):
+	'''(L2, (F1,F2), O, P, S, W, Z)'''
+	try:
+		m = tuple([int(i) for i in re.match(_REGEX_STATUS4, s).groups()])
+		return (m[0], m[1:3], m[3], m[4], m[5], m[6], m[7])
+	except Exception as e:
+		e.args = ('Got invalid status(4) string \'{:s}\''.format(s),) + e.args
+		raise
 
 # Some functions for internal use
 #################################
@@ -93,17 +135,17 @@ def _opt(val, enum=None):
 	if enum is not None and val in enum:
 		return str(enum[val])
 	else:
-		return None if val is None else str(val)
+		return '' if val is None else str(val)
 
 # Some command generators, all excluding the trailing X that would lead
 # to immediate execution
 #######################################################################
 
-def _set_bias_range_delay_cmd(self, bias=None, rng=None, delay=None):
+def _set_bias_range_delay_cmd(bias=None, rng=None, delay=None):
 	'''Generate command to set bias, range and delay'''
 	return 'B{:s},{:s},{:s}'.format(_opt(bias), _opt(rng), _opt(delay))
 
-def _set_data_format_cmd(self, items=None, fmt=None, lines=None):
+def _set_data_format_cmd(items=None, fmt=None, lines=None):
 	'''Generate command to set data format.'''
 	if type(items) is list:
 		items = sum([(OUTPUT_ITEMS[i] if i in OUTPUT_ITEMS else i) for i in items])
@@ -121,8 +163,10 @@ class Keithley_236(Instrument):
 		self._address = address
 		self._visains = visa.instrument(address)
 
-		self.add_parameter('function', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+		self._buffered_cmd = ''
+
+		self.add_parameter('function', type=types.TupleType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				option_map={
 					(0,0): 'DC_Vsrc_Imeas',
 					(0,1): 'Sweep_Vsrc_Imeas',
@@ -130,46 +174,24 @@ class Keithley_236(Instrument):
 					(1,1): 'Sweep_Isrc_Vmeas'
 				})
 
-		self.add_parameter('range', type=types.FloatType,
+		self.add_parameter('bias', type=types.FloatType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET)
+
+		self.add_parameter('bias_range', type=types.IntType,
 				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
 				minval=0, maxval=9, #maxval=10 for Keithley 238
-				option_map={
-					0: 'auto',
-					1: '1.1V / 1nA', # 1.5V for Keithley 238
-					2: '11V / 10nA', # 15V for Keithley 238
-					3: '110V / 100nA',
-					4: '1uA', # Also 1.1kV for Keithley 237
-					5: '10uA',
-					6: '100uA',
-					7: '1mA',
-					8: '10mA',
-					9: '100mA'
-					# 10 = 1A for Keithley 238
-				})
+				option_map=OPTMAP_RANGE)
+
+		self.add_parameter('meas_range', type=types.IntType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
+				minval=0, maxval=9, #maxval=10 for Keithley 238
+				option_map=OPTMAP_RANGE)
 
 		self.add_parameter('compliance', type=types.FloatType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET)
-		
-		self.add_parameter('zero', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
-				option_map={
-					0: 'Disabled',
-					1: 'Enabled',
-					2: 'Value',
-				})
-
-		self.add_parameter('zero_value', type=types.FloatType,
-				flags=Instrument.FLAG_GETSET)
-
-		#self.add_parameter('rate', type=types.IntType,
-		#		flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
-		#		option_map={
-		#			0: '4.5 digit',
-		#			1: '5.5 digit',
-		#		})
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET)
 
 		self.add_parameter('filter', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				option_map={
 					0: 'No filter',
 					1: '2-reading filter',
@@ -179,8 +201,8 @@ class Keithley_236(Instrument):
 					5: '32-reading filter'
 				})
 
-		self.add_parameter('trigger-origin', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+		self.add_parameter('trigger_origin', type=types.IntType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				option_map={
 					0: 'IEEE X',
 					1: 'IEEE GET',
@@ -189,8 +211,8 @@ class Keithley_236(Instrument):
 					4: 'Immediate (Front panel or command)'
 				})
 
-		self.add_parameter('trigger-timing', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+		self.add_parameter('trigger_timing', type=types.IntType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				option_map={
 					0: 'Continuous (no trigger needed)',
 					1: 'TRIG-source-delay-measure',
@@ -203,8 +225,8 @@ class Keithley_236(Instrument):
 					8: 'Single pulse'
 				})
 
-		self.add_parameter('trig-out-timing', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+		self.add_parameter('trig_out_timing', type=types.IntType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				option_map={
 					0: 'None',
 					1: 'source-TRIG-delay-measure',
@@ -217,16 +239,12 @@ class Keithley_236(Instrument):
 					8: 'Pulse end'
 				})
 
-		self.add_parameter('trig-out-sweepend', type=types.BooleanType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET)
+		self.add_parameter('trig_out_sweepend', type=types.BooleanType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET)
 
 		self.add_parameter('delay', type=types.IntType,
 				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
 				minval=0, maxval=65000, units='msec')
-
-		#self.add_parameter('interval', type=types.IntType,
-		#		flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
-		#		minval=15, maxval=999999, units='msec')
 
 		self.add_parameter('error', type=types.IntType,
 				flags=Instrument.FLAG_GET)
@@ -236,25 +254,39 @@ class Keithley_236(Instrument):
 				tags=['measure'])
 
 		self.add_parameter('output_items', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				minval=0, maxval=15,
-				option_map=_multiopts({OUTPUT_ITEMS[i]: i for i in OUTPUT_ITEMS})
-		
+				option_map=_multiopts({OUTPUT_ITEMS[i]: i for i in OUTPUT_ITEMS}))
+
 		self.add_parameter('output_format', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				minval=0, maxval=4,
-				option_map={OUTPUT_FORMATS[i]: i for i in OUTPUT_FORMATS}
-		
+				option_map={OUTPUT_FORMATS[i]: i for i in OUTPUT_FORMATS})
+
 		self.add_parameter('output_lines', type=types.IntType,
-				flags=Instrument.FLAG_SET | Instrument.FLAG_SOFTGET,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET,
 				minval=0, maxval=2,
-				option_map={OUTPUT_LINES[i]: i for i in OUTPUT_LINES}
-		
+				option_map={OUTPUT_LINES[i]: i for i in OUTPUT_LINES})
+
+		self.add_parameter('operate', type=types.BooleanType,
+				flags=Instrument.FLAG_SET | Instrument.FLAG_GET)
+
+		self.add_parameter('hit_compliance', type=types.BooleanType,
+				flags=Instrument.FLAG_GET)
+
 		self.add_function('set_defaults')
 		self.add_function('self_test')
 		self.add_function('read')
-		self.set_defaults()
-	
+		#self.set_defaults()
+
+	def write(self, cmd):
+		print(cmd)
+		if len(cmd) and cmd[-1] == 'X':
+			self._visains.write(self._buffered_cmd + cmd)
+			self._buffered_cmd = ''
+		else:
+			self._buffered_cmd += cmd
+
 	def set_defaults(self):
 		'''
 		Set default parameters.
@@ -266,12 +298,16 @@ class Keithley_236(Instrument):
 		for their own implementation of QTLab.
 		'''
 		# Restore factory defaults
-		self.self_test([0])
+		#self.self_test([0])
 
 		# Set our preferred defaults for as far as they differ from the
 		# factory defaults
-		self._visains.write(_set_data_format_cmd(
-					'measure', 'ASCII_noprefix_nosuffix', 'onesample'))
+		self.set_output_items(4)
+		self.set_output_format(2)
+		self.set_output_lines(0)
+		self.set_bias_range(2)
+		self.set_bias(0)
+		self.set_meas_range(2)
 		self.set_compliance(8e-9)
 
 	def self_test(self, whichtest=[1,2]):
@@ -286,53 +322,51 @@ class Keithley_236(Instrument):
 		if type(whichtest) is int:
 			whichtest = [whichtest]
 		cmd = ''.join(['J{:d}X'.format(i) for i in whichtest])
-		self._visains.write(cmd)
+		self.write(cmd)
+
+	def do_set_bias(self, bias):
+		'''Set bias'''
+		self.write('{:s}X'.format(_set_bias_range_delay_cmd(bias=bias)))
+
+	def do_set_output_items(self, items):
+		'''Set output items'''
+		self.write(_set_data_format_cmd(items, None, None) + 'X')
+
+	def do_set_output_format(self, fmt):
+		'''Set output format'''
+		self.write(_set_data_format_cmd(None, fmt, None) + 'X')
+
+	def do_set_output_lines(self, lines):
+		'''Set output format lines'''
+		self.write(_set_data_format_cmd(None, None, lines) + 'X')
 
 	def do_set_function(self, func):
 		'''Set the source and measurement function.'''
-		self._visains.write('F{:d},{:d}X'.format(*func))
+		self.write('F{:d},{:d}X'.format(*func))
 		return True
 
-	def do_set_range(self, rng):
-		'''Set the measurement range.'''
-		self._visains.write('{:s}X'.format(_set_bias_range_delay_cmd(rng=rng)))
+	def do_set_bias_range(self, rng):
+		'''
+		Set the bias range.
+		Note that this may or may not also affect the measurement range.
+		'''
+		self.write('{:s}X'.format(_set_bias_range_delay_cmd(rng=rng)))
 		return True
 
-	def do_set_zero(self, zero):
-		'''Set whether to use zero calibration.'''
-		#self._visains.write('Z%dX' % zero)
-		#return True
-		raise NotImplementedError(
-				'This instrument does not appear to have a command'
-				'for automatic offset nulling.')
-
-	def do_get_zero_value(self):
-		raise NotImplementedError(
-				'This instrument does not appear to have a command'
-				'for reading the offset null.')
-		#return self._visains.ask('U4')
-
-	def do_set_zero_value(self, val):
-		'''Set the zero calibration value.'''
-		#self._visains.write('V%EX' % val)
-		raise NotImplementedError(
-				'This instrument does not appear to have a command'
-				'for manual offset nulling.')
-
-	def do_set_rate(self, rate):
-		'''Set the rate and precision.'''
-		#self._visains.write('R%dX' % rate)
-		#return True
-		raise NotImplementedError(
-				'This instrument does not appear to have a command'
-				'for setting the rate.')
+	def do_set_meas_range(self, rng):
+		'''
+		Set the measurement range.
+		Note that this may or may not also affect the bias range.
+		'''
+		self.write('L,{:d}X'.format(rng))
+		return True
 
 	def do_set_filter(self, val):
 		'''Set filter type.'''
-		self._visains.write('P{:d}X'.format(val))
+		self.write('P{:d}X'.format(val))
 		return True
 
-	def do_set_trigger(self, trig):
+	def _set_trigger(self, trig):
 		'''
 		Set trigger source, input trigger timing, output trigger timing
 		and whether to generate a trigger pulse at the end of a sweep.
@@ -348,30 +382,43 @@ class Keithley_236(Instrument):
 		(src, t_in, t_out, end) = trig
 		if type(end) is bool:
 			end = int(end)
-		self._visains.write('T{:s},{:s},{:s},{:s}X'.format(
+		self.write('T{:s},{:s},{:s},{:s}X'.format(
 				_opt(src), _opt(t_in), _opt(t_out), _opt(end)))
 		return True
 
+	def do_set_trigger_origin(self, orig):
+		'''Set the trigger origin'''
+		self._set_trigger((orig, None, None, None))
+
+	def do_set_trigger_timing(self, t_in):
+		'''Set the input trigger timing'''
+		self._set_trigger((None, t_in, None, None))
+
+	def do_set_trig_out_timing(self, t_out):
+		'''Set the output trigger timing'''
+		self._set_trigger((None, None, t_out, None))
+
+	def do_set_trig_out_sweepend(self, end):
+		'''Set whether to generate output trigger on sweep end'''
+		self._set_trigger((None, None, None, end))
+
 	def do_set_delay(self, val):
 		'''Set delay after trigger before taking a measurement.'''
-		self._visains.write('{:s}X'.format(
+		self.write('{:s}X'.format(
 				_set_bias_range_delay_cmd(delay=val)))
 		return True
 
-	def do_set_interval(self, val):
-		'''Set trigger interval.'''
-		raise NotImplementedError(
-				'This instrument does not appear to have a command'
-				'for setting the trigger interval.')
-		#self._visains.write('Q%d' % val)
-		#return True
-
 	def do_set_compliance(self, compliance):
-		self._visains.write('L{:.2E},X'.format(compliance))
-	
+		self.write('L{:.2E},X'.format(compliance))
+
 	def do_get_error(self):
-		'''Read the error condition.'''
-		return self.get_status(1)
+		'''Read the error condition and return as int representing flags.'''
+		err = [int(i) for i in self.get_status(1)[3:]]
+		return sum([2**i * err[-i-1] for i in range(len(err))])
+
+	def do_set_operate(self, operate):
+		'''Set the SMU in operate or standby mode'''
+		self.write('N{:d}X'.format(operate))
 
 	def get_status(self, whichstatus='all'):
 		'''
@@ -395,21 +442,119 @@ class Keithley_236(Instrument):
 		if whichstatus is 'all':
 			whichstatus = list(range(12))
 		if isinstance(whichstatus, list):
-			return [get_status(i) for i in whichstatus]
+			return [self.get_status(i) for i in whichstatus]
 		else:
 			return self._visains.ask('U{:d}X'.format(whichstatus))
-	
+
+	def get_interpreted_status3(self):
+		'''()'''
+		
+
 	def read(self):
 		'''Read a value if not in external trigger mode.'''
-		mode = self.get_trigger(query=False)
-		if mode in (0, 1):
-			ret = self._visains.ask('')
-		elif mode in (2, 3):
-			ret = self._visains.ask('X')
-		elif mode in (4, 5):
-			ret = self._visains.ask('GET')
-		return float(ret)
+		if self.get_trigger_timing() == 0:
+			strval = float(self._visains.read())
+		else:
+			strval = float(self._visains.ask('H0X'))
+		return float(strval)
 
 	def do_get_value(self):
+		'''Get measurement value'''
 		return self.read()
 
+	def do_get_compliance(self):
+		'''Get compliance value'''
+		cplstr = self.get_status(5)
+		if cplstr[:3] in ('ICP', 'VCP'):
+			return float(cplstr[3:])
+		else:
+			raise RuntimeError(
+					'Keithley 236: read invalid compliance '
+					'status string \'{:s}\''.format(cplstr))
+
+	def do_get_output_items(self):
+		'''Get output items in flag-int format'''
+		return _interpret_status3(self.get_status(3))[0][0]
+
+	def do_get_output_format(self):
+		'''Get output format'''
+		return _interpret_status3(self.get_status(3))[0][1]
+
+	def do_get_output_lines(self):
+		'''Get output lines'''
+		return _interpret_status3(self.get_status(3))[0][2]
+
+	def do_get_eoi_and_bus_holdoff(self):
+		'''Get EOI and bus hold-off (not implemented as parameter)'''
+		return _interpret_status3(self.get_status(3))[1]
+
+	def do_get_srq_mask(self):
+		'''Get SRQ (Service ReQuest) mask (not implemented as parameter)'''
+		return _interpret_status3(self.get_status(3))[2][0]
+
+	def do_get_hit_compliance(self):
+		'''Check if measured value hits compliance value'''
+		return bool(_interpret_status3(self.get_status(3))[2][1])
+
+	def do_get_operate(self):
+		'''Check whether operating or in standby'''
+		return bool(_interpret_status3(self.get_status(3))[3])
+
+	def do_get_trigger_enable(self):
+		'''See if triggers are enabled (not implemented as parameter)'''
+		return bool(_interpret_status3(self.get_status(3))[4])
+
+	def do_get_trigger_origin(self):
+		'''Get input trigger origin'''
+		return _interpret_status3(self.get_status(3))[5][0]
+
+	def do_get_trigger_timing(self):
+		'''Get input trigger timing'''
+		return _interpret_status3(self.get_status(3))[5][1]
+
+	def do_get_trig_out_timing(self):
+		'''Get output trigger timing'''
+		return _interpret_status3(self.get_status(3))[5][2]
+
+	def do_get_trig_out_sweepend(self):
+		'''See if there's an output trigger at the end of a sweep'''
+		return _interpret_status3(self.get_status(3))[5][3]
+
+	def do_get_1100V_range(self):
+		'''
+		See if 1100 Volt range is enabled (not implemented as parameter)
+		(Keithley 237 only)
+		'''
+		return bool(_interpret_status3(self.get_status(3))[6])
+
+	def do_get_terminator(self):
+		'''Check output line terminator (not implemented as parameter)'''
+		return _interpret_status3(self.get_status(3))[7]
+
+	def do_get_meas_range(self):
+		'''Get measurement range'''
+		return _interpret_status4(self.get_status(4))[0]
+
+	def do_get_function(self):
+		'''Get measurement range'''
+		return _interpret_status4(self.get_status(4))[1]
+
+	def do_get_sense(self):
+		'''Get output sense (local/remote) (not implemented as parameter)'''
+		return _interpret_status4(self.get_status(4))[2]
+
+	def do_get_filter(self):
+		'''Get filter specification'''
+		return _interpret_status4(self.get_status(4))[3]
+
+	def do_get_integration_time(self):
+		'''Get integration time specification (not implemented as parameter)'''
+		return _interpret_status4(self.get_status(4))[4]
+
+	def do_get_default_delay(self):
+		'''Check if default delay is enabled (not implemented as parameter)'''
+		return bool(_interpret_status4(self.get_status(4))[5])
+
+	def do_get_suppression(self):
+		'''Check if suppression is enabled (not implemented as parameter)'''
+		return bool(_interpret_status4(self.get_status(4))[6])
