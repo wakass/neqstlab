@@ -15,6 +15,28 @@ class Bunch:
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
 
+def _estimate_time_recur(axes, sweepback):
+	'''
+	Helper function for estimating execution time in seconds
+	Assumes rate_delay values to be in milliseconds
+	'''
+	mod = axes[0].module_options
+	# Lowest-level axis
+	if len(axes) == 1:
+		return 1e-3 * mod['rate_delay'] * np.abs(
+				(axes[0].begin - axes[0].end) / mod['rate_stepsize'])
+	# Not lowest-level axis
+	else:
+		delay_per_step = 1e-3 * mod['rate_delay'] * (
+				float(axes[0].stepsize) / mod['rate_stepsize'])
+		steps = int(np.ceil(np.abs(
+				(axes[0].begin - axes[0].end) / axes[0].stepsize)))
+		vals = steps + 1
+		if not sweepback:
+			vals = 2 * vals - 1
+		lower_level_time = _estimate_time_recur(axes[1:], sweepback)
+		return steps * delay_per_step + vals * lower_level_time
+
 #generator version of hilbert space function
 def hilbert_it(x0, y0, xi, xj, yi, yj, n):
     if n <= 0:
@@ -182,9 +204,11 @@ class parspace(object):
 		except:
 			raise Exception('Unknown traverse function specified')
 	
-	def estimate_time(self):
+	def estimate_time_old(self):
 		#calculate time, try at least
 		#assume no sweepback measure2D
+		# A newer function replacing this one exists, but has not yet been
+		# tested thoroughly enough for this one to be permanently removed
 		try:		
 			axes = []
 			for i in range(-2,0): #loop and sweep axis consecutively
@@ -206,8 +230,27 @@ class parspace(object):
 			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
 		except Exception as e:
 			print e
+	
+	def estimate_time(self, sweepback=False):
+		'''
+		Estimate execution time
+		Assumes rate_delay values to be im milliseconds
+		'''
+		try:		
+			seconds = _estimate_time_recur(self.xs, sweepback)
+			(minutes, seconds) = divmod(seconds, 60)
+			(hours, minutes) = divmod(minutes, 60)
+			(days, hours) = divmod(hours, 24)
+			print('Total estimated time: {:.0f}d {:.0f}h {:.0f}m {:.0f}s'
+					.format(days, hours, minutes, seconds))
+		except Exception as e:
+			print(e)
+	
 	def traverse(self):
-		#traverse the defined parameter space, using e.g. a space filling curve defined in self.traverse_func
+		'''
+		traverse the defined parameter space, using e.g. a space filling
+		curve defined in self.traverse_func
+		'''
 		instruments = []
 		for x in self.xs:
 			instr = qt.instruments.get_instruments()[x.instrument]
