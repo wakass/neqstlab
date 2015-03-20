@@ -137,6 +137,9 @@ def _opt(val, enum=None):
 	else:
 		return '' if val is None else str(val)
 
+def _print(s):
+	pass
+
 # Some command generators, all excluding the trailing X that would lead
 # to immediate execution
 #######################################################################
@@ -279,13 +282,25 @@ class Keithley_236(Instrument):
 		self.add_function('read')
 		#self.set_defaults()
 
+	def get_serial_poll_byte(self):
+		'''
+		Acquire the instrument's serial poll byte and reset it by
+		writing 0 to  the SRQ mask.
+		TODO: read the actual value of the mask and write it back
+		instead of writing a default value.
+		'''
+		spb = self._visains._GpibInstrument__get_stb()
+		self.write('M0,X')
+		return spb
+
 	def write(self, cmd):
-		print(cmd)
-		if len(cmd) and cmd[-1] == 'X':
-			self._visains.write(self._buffered_cmd + cmd)
-			self._buffered_cmd = ''
-		else:
-			self._buffered_cmd += cmd
+		_print(cmd)
+		self._visains.write(cmd)
+
+	def ask(self, cmd):
+		ret = self._visains.ask(cmd)
+		_print('{:s} -> {:s}'.format(cmd, ret))
+		return ret
 
 	def set_defaults(self):
 		'''
@@ -444,19 +459,20 @@ class Keithley_236(Instrument):
 		if isinstance(whichstatus, list):
 			return [self.get_status(i) for i in whichstatus]
 		else:
-			return self._visains.ask('U{:d}X'.format(whichstatus))
-
-	def get_interpreted_status3(self):
-		'''()'''
-		
+			return self.ask('U{:d}X'.format(whichstatus))
 
 	def read(self):
 		'''Read a value if not in external trigger mode.'''
 		if self.get_trigger_timing() == 0:
-			strval = float(self._visains.read())
+			strval = self._visains.read()
+			_print('<empty> -> {:s}'.format(strval))
 		else:
-			strval = float(self._visains.ask('H0X'))
-		return float(strval)
+			strval = self.ask('H0X')
+		try:
+			return float(strval)
+		except:
+			print('read failed')
+			return self.read()
 
 	def do_get_value(self):
 		'''Get measurement value'''
@@ -493,8 +509,14 @@ class Keithley_236(Instrument):
 		return _interpret_status3(self.get_status(3))[2][0]
 
 	def do_get_hit_compliance(self):
-		'''Check if measured value hits compliance value'''
-		return bool(_interpret_status3(self.get_status(3))[2][1])
+		'''
+		Check if measured value hits compliance value.
+		Note that the returned value may represent a histirocal state;
+		it will be True if the compliance has been hit at any moment
+		since the last time the serial poll byte was reset.
+		Also note that this function will reset the serial poll byte.
+		'''
+		return bool(self.get_serial_poll_byte() & 128)
 
 	def do_get_operate(self):
 		'''Check whether operating or in standby'''
