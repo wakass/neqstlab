@@ -73,13 +73,17 @@ class CVStepReadyChecker:
 		check_ready_crit() instead.
 		'''
 		if self.completetime is not None:
+			if t_now > self.completetime + self.waitafter:
+				print('Reached waitafter')
 			return t_now > self.completetime + self.waitafter
 		else:
 			t_rel = t_now - self.starttime
-			if t_rel > self.minwait and self.check_ready_crit(t_now, Vmeas):
+			if t_rel > self.minwait and self.check_ready_crit(Vmeas):
+				print('reached criterion')
 				self.completetime = t_now
 				return self.waitafter == 0.
 			elif t_rel > self.maxwait:
+				print('reached maxwait')
 				if self.tout_except:
 					raise CVStepTimeout()
 				else:
@@ -90,14 +94,16 @@ class CVStepReadyChecker:
 class CVDefaultStepReadyChecker(CVStepReadyChecker):
 	'''Default instrument-independent CVStepReadyChecker'''
 	def __init__(self, Vsrc, Vold, wait_stepfrac=.95, minwait=5.,
-			maxwait=60., waitafter=0., exceptontimeout=False):
+			maxwait=60., waitafter=0., exceptontimeout=False,
+			measoffset=0.):
 		CVStepReadyChecker.__init__(self, minwait, maxwait, waitafter,
 				exceptontimeout, Vsrc, Vold)
 		self.wait_stepfrac = wait_stepfrac
+		self.measoffset = measoffset
 
 	def check_ready_crit(self, Vmeas):
-		return ((Vmeas - self.Vold) / (self.Vsrc - self.Vold) >
-				self.wait_stepfrac)
+		return (abs(Vmeas - self.measoffset - self.Vsrc) <
+				(1 - self.wait_stepfrac) * abs(self.Vsrc - self.Vold))
 
 class CVSMUStepReadyChecker(CVStepReadyChecker):
 	'''Instrument-specific CVStepReadyChecker for Keithley236 SMU'''
@@ -176,19 +182,30 @@ def CV(
 	except CVStepTimeout:
 		print('Source value {:f} not reached, aborting measurement'
 				.format(Vsrc))
+	except Exception:
+		print('An error occured')
+		qt.mend()
+		data.close_file()
+		raise
 	qt.mend()
 	data.close_file()
 	print('Measurement finished')
 
 def CV_default():
+	'''Run C-V measurement with default settings'''
 	smuperioret = qt.get_instruments()['SMUperioret']
 	elKeef = qt.get_instruments()['elKeefly']
-	smuperioret.set_function((0, 0))
+	#smuperioret.set_trigger_timing(0)
+	#smuperioret.set_function((0, 0))
 	smuperioret.set_bias_range(2)
 	smuperioret.set_meas_range(2)
 	smuperioret.set_compliance(8e-9)
-	smuperioret.set_operate(True)
-	CV('dummy', 0., 2., .1, smuperioret, elKeef)
+	if not smuperioret.get_operate():
+		smuperioret.set_operate(True)
+	CV('dummy', 0., .02, .01, smuperioret, elKeef,
+			readychecker=CVSMUStepReadyChecker(smuperioret))
 
-CV_default()
+# Allow both execution as a script and inclusion as a module
+if __name__ == '__main__':
+	CV_default()
 
