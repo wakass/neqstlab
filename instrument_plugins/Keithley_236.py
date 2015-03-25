@@ -229,7 +229,7 @@ class _Keithley236BaseException:
 			if err & 2**i:
 				self.args += ('ERROR: {:s}'.format(ERRORS[i]),)
 		for i in WARNINGS:
-			if err & 2**i:
+			if warn & 2**i:
 				self.args += ('WARNING: {:s}'.format(WARNINGS[i]),)
 
 class Keithley236Error(RuntimeError, _Keithley236BaseException):
