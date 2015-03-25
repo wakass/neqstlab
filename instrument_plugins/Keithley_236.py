@@ -45,11 +45,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-from instrument import Instrument
 import types
 import visa
-import numpy
 import re
+import warnings
+from instrument import Instrument
 
 # Some ENUMs
 ############
@@ -77,13 +77,72 @@ OPTMAP_RANGE = {
 	9: '100mA' }
 	# 10 = 1A for Keithley 238
 
+ERRORS = {
+	25: 'Trigger Overrun '
+		'(ignored trigger because still processing previous trigger)',
+	24: 'IDDC (illegal command)',
+	23: 'IDDCO (command with illegal option)',
+	22: 'Interlock Present '
+		'(Failed to set operate/standby or went to standby because '
+		'of interlock condition)',
+	21: 'Illegal Measure Range',
+	20: 'Illegal Source Range',
+	19: 'Invalid Sweep Mix (tried to mix pulsed and non-pulsed sweeps)',
+	18: 'Log Cannot Cross Zero '
+		'(tried to create logarithmic sweep that passes zero)',
+	17: 'Autoranging Source with Pulse Sweep',
+	16: 'In Calibration '
+		'(tried to send non-calibration command while in calibration mode)',
+	15: 'In Standby (tried to send calibration command while in standby mode)',
+	14: 'Unit is a 236 (Tried 1.1kV calibration command on Keithley 236)',
+	13: 'IOU DPRAM Failed (dual-port RAM in I/O controller failed)',
+	12: 'IOU EEROM Failed (EEROM in I/O controller failed)',
+	11: 'IOU Cal. Checksum Error '
+		'(checksum of calibration constants does not match)',
+	10: 'DPRAM Lockup '
+		'(ROM/RAM failure in source/measure controller which consequentially '
+		'does not respond to the I/O controller)',
+	 9: 'DPRAM Link Error '
+		'(Communication error in dual-port RAM between I/O controller and '
+		'source/measure controller',
+	 8: 'Cal. ADC Zero Error (Calibration constant outside expected range)',
+	 7: 'Cal. ADC Gain Error (Calibration constant outside expected range)',
+	 6: 'Cal. SRC Zero Error (Calibration constant outside expected range)',
+	 5: 'Cal. SRC Gain Error (Calibration constant outside expected range)',
+	 4: 'Cal. Common Mode Error (error calibrating common mode adjustment)',
+	 3: 'Cal. Compliance Error (compliance during calibration procedure)',
+	 2: 'Cal. Value Error '
+		'(Entered calibration constant outside '
+		'expected range for current step)',
+	 1: 'Cal. Constants Error '
+		'(Calibration constants outside limits during power-up)',
+	 0: 'Cal. Invalid Error '
+		'(compliance error during power-up, '
+		'factory initialisation DCL or SDC)' }
+
+WARNINGS = {
+	9: 'Uncalibrated (illegal calibration constants stored in EEROM)',
+	8: 'Temporary Cal '
+		'(enter or exit calibration mode when CAL LOCK is LOCKED)',
+	7: 'Value Out of Range '
+		'(bias, compliance or step size incompatible with range)',
+	6: 'Sweep buffer Filled',
+	5: 'No Sweep Points; Must Create sweep (try to modify non-existent sweep)',
+	4: 'Pulse Times Not Met',
+	3: 'Not in Remote',
+	2: 'Measurement Range Changed Due to 1kV/100mA or 110V/1A Range Select',
+	1: 'Measurement Overflow (OFLO) / Sweep Aborted',
+	0: 'Pending Trigger (trigger sent while processing other command)' }
+
 # Regular expressions
 #####################
+_REGEX_STATUS1 = re.compile('ERS([01]{26})')
 _REGEX_STATUS3 = re.compile('MSTG(0\d|1[1-5]),([0-4]),([0-2])'
 		'K([0-3])M([01]\d{2}),([01])N([01])R([01])'
 		'T([0-4]),([0-8]),([0-8]),([01])V([01])Y([0-4])')
 _REGEX_STATUS4 = re.compile('[IV]MPL,(0\d|10)F([01]),([01])'
 		'O([01])P([0-5])S([0-3])W([01])Z([01])')
+_REGEX_STATUS9 = re.compile('ERS([01]{10})')
 
 def _interpret_status3(s):
 	'''((G1,G2,G3), K, (M1,M2), N, R, (T1,T2,T3,T4), V, Y)'''
@@ -154,6 +213,36 @@ def _set_data_format_cmd(items=None, fmt=None, lines=None):
 		items = sum([(OUTPUT_ITEMS[i] if i in OUTPUT_ITEMS else i) for i in items])
 	return 'G{:s},{:s},{:s}'.format(_opt(items, OUTPUT_ITEMS),
 			_opt(fmt, OUTPUT_FORMATS), _opt(lines, OUTPUT_LINES))
+
+# Exception classes
+###################
+
+class _Keithley236BaseException:
+	'''
+	Base class to generate exception from error and warning flags.
+	Should not be directly instantiated but rather extended into
+	separate error and warning classes which also has to derive from
+	BaseException or one of its subclasses.
+	'''
+	def __init__(self, err, warn):
+		for i in ERRORS:
+			if err & 2**i:
+				self.args += ('ERROR: {:s}'.format(ERRORS[i]),)
+		for i in WARNINGS:
+			if err & 2**i:
+				self.args += ('WARNING: {:s}'.format(WARNINGS[i]),)
+
+class Keithley236Error(RuntimeError, _Keithley236BaseException):
+	'''Keithley 236 error exception class'''
+	def __init__(self, err, warn):
+		RuntimeError.__init__(self)
+		_Keithley236BaseException.__init__(self, err, warn)
+
+class Keithley236Warning(RuntimeWarning, _Keithley236BaseException):
+	'''Keithley 236 warning exception class'''
+	def __init__(self, warn):
+		RuntimeWarning.__init__(self)
+		_Keithley236BaseException.__init__(self, 0, warn)
 
 # The actual class
 ##################
@@ -252,6 +341,9 @@ class Keithley_236(Instrument):
 		self.add_parameter('error', type=types.IntType,
 				flags=Instrument.FLAG_GET)
 
+		self.add_parameter('warning', type=types.IntType,
+				flags=Instrument.FLAG_GET)
+
 		self.add_parameter('value', type=types.FloatType,
 				flags=Instrument.FLAG_GET,
 				tags=['measure'])
@@ -280,7 +372,34 @@ class Keithley_236(Instrument):
 		self.add_function('set_defaults')
 		self.add_function('self_test')
 		self.add_function('read')
-		#self.set_defaults()
+
+	def _get_errwarn(self, whichword, regex):
+		'''Get error or warning condition as int representing flags'''
+		errword = self.get_status(whichword)
+		try: 
+			err = [int(i) for i in re.match(regex, errword).group(1)]
+			return sum([2**i * err[-i-1] for i in range(len(err))])
+		except AttributeError:
+			print('Got invalid status word {:d}: {:s}'
+					.format(whichword, errword))
+
+	def check_error(self):
+		'''Check for any errors and warnings and report them'''
+		(err, warn) = (self.get_error(), self.get_warning)
+		if err:
+			raise Keithley236Error(err, warn)
+		elif warn:
+			warnings.warn(Keithley236Warning(warn))
+
+	def test_check_error(self, err, warn):
+		'''
+		Test case for check_error() where you specify the error and
+		warning flag ints yourself
+		'''
+		if err:
+			raise Keithley236Error(err, warn)
+		elif warn:
+			warnings.warn(Keithley236Warning(warn))
 
 	def get_serial_poll_byte(self):
 		'''
@@ -428,8 +547,11 @@ class Keithley_236(Instrument):
 
 	def do_get_error(self):
 		'''Read the error condition and return as int representing flags.'''
-		err = [int(i) for i in self.get_status(1)[3:]]
-		return sum([2**i * err[-i-1] for i in range(len(err))])
+		return self._get_errwarn(1, _REGEX_STATUS1)
+	
+	def do_get_warning(self):
+		'''Read the warning condition and return as int representing flags.'''
+		return self._get_errwarn(9, _REGEX_STATUS9)
 
 	def do_set_operate(self, operate):
 		'''Set the SMU in operate or standby mode'''
