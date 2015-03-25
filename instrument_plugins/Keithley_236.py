@@ -222,7 +222,9 @@ class _Keithley236BaseException:
 	Base class to generate exception from error and warning flags.
 	Should not be directly instantiated but rather extended into
 	separate error and warning classes which also has to derive from
-	BaseException or one of its subclasses.
+	BaseException or one of its subclasses. The BaseException
+	constructor should be called before the _Keithley236BaseException
+	constructor.
 	'''
 	def __init__(self, err, warn):
 		for i in ERRORS:
@@ -234,22 +236,28 @@ class _Keithley236BaseException:
 
 class Keithley236Error(RuntimeError, _Keithley236BaseException):
 	'''Keithley 236 error exception class'''
-	def __init__(self, err, warn):
-		RuntimeError.__init__(self)
+	def __init__(self, when, err, warn):
+		RuntimeError.__init__(self, 'Error(s) while {:s}'.format(when))
 		_Keithley236BaseException.__init__(self, err, warn)
 
 class Keithley236Warning(RuntimeWarning, _Keithley236BaseException):
 	'''Keithley 236 warning exception class'''
-	def __init__(self, warn):
-		RuntimeWarning.__init__(self)
+	def __init__(self, when, warn):
+		RuntimeWarning.__init__(self, 'Warning(s) while {:s}'.format(when))
 		_Keithley236BaseException.__init__(self, 0, warn)
+
 
 # The actual class
 ##################
 
 class Keithley_236(Instrument):
-
+	'''Keithley 236 Source-Measurement Unit'''
+	
+	# Constructor
+	#############
+	
 	def __init__(self, name, address=None):
+		'''Constructor'''
 		Instrument.__init__(self, name, tags=['measure', 'sweep'])
 
 		self._address = address
@@ -373,6 +381,9 @@ class Keithley_236(Instrument):
 		self.add_function('self_test')
 		self.add_function('read')
 
+	# Low-level utility and private methods
+	#######################################
+	
 	def _get_errwarn(self, whichword, regex):
 		'''Get error or warning condition as int representing flags'''
 		errword = self.get_status(whichword)
@@ -382,24 +393,6 @@ class Keithley_236(Instrument):
 		except AttributeError:
 			print('Got invalid status word {:d}: {:s}'
 					.format(whichword, errword))
-
-	def check_error(self):
-		'''Check for any errors and warnings and report them'''
-		(err, warn) = (self.get_error(), self.get_warning)
-		if err:
-			raise Keithley236Error(err, warn)
-		elif warn:
-			warnings.warn(Keithley236Warning(warn))
-
-	def test_check_error(self, err, warn):
-		'''
-		Test case for check_error() where you specify the error and
-		warning flag ints yourself
-		'''
-		if err:
-			raise Keithley236Error(err, warn)
-		elif warn:
-			warnings.warn(Keithley236Warning(warn))
 
 	def get_serial_poll_byte(self):
 		'''
@@ -421,6 +414,63 @@ class Keithley_236(Instrument):
 		_print('{:s} -> {:s}'.format(cmd, ret))
 		return ret
 
+	def _set_trigger(self, trig):
+		'''
+		Set trigger source, input trigger timing, output trigger timing
+		and whether to generate a trigger pulse at the end of a sweep.
+		Arguments (all optional):
+			src:   input trigger source
+			t_in:  input trigger timing
+			t_out: output trigger timing
+			end:   whether or not to generate an output trigger at the
+			       end of a sweep
+		Arguments must be tupled, and None values must be inserted at
+		the positions of any arguments you do not want to provide.
+		'''
+		(src, t_in, t_out, end) = trig
+		if type(end) is bool:
+			end = int(end)
+		self.write('T{:s},{:s},{:s},{:s}X'.format(
+				_opt(src), _opt(t_in), _opt(t_out), _opt(end)))
+		return True
+
+	def get_status(self, whichstatus='all'):
+		'''
+		Read one of the instrument's statuses.
+		The following statuses are available:
+			 0: Model no. and revision
+			 1: Error status word
+			 2: Stored ASCII string
+			 3: Machine status word
+			 4: Measurement parameters
+			 5: Compliance value
+			 6: Suppression value
+			 7: Calibration status word
+			 8: Defined sweep size
+			 9: Warning status word
+			10: First sweep point in compliance
+			11: Sweep measure size
+		Multiple statuses can be read by providing a list or
+		'all' as the status specifyer.
+		'''
+		if whichstatus is 'all':
+			whichstatus = list(range(12))
+		if isinstance(whichstatus, list):
+			return [self.get_status(i) for i in whichstatus]
+		else:
+			return self.ask('U{:d}X'.format(whichstatus))
+
+	# High-level utility methods
+	############################
+
+	def check_error(self, when):
+		'''Check for any errors and warnings and report them'''
+		(err, warn) = (self.get_error(), self.get_warning)
+		if err:
+			raise Keithley236Error(when, err, warn)
+		elif warn:
+			warnings.warn(Keithley236Warning(when, warn))
+	
 	def set_defaults(self):
 		'''
 		Set default parameters.
@@ -443,6 +493,9 @@ class Keithley_236(Instrument):
 		self.set_bias(0)
 		self.set_meas_range(2)
 		self.set_compliance(8e-9)
+
+	# Commands and setters
+	######################
 
 	def self_test(self, whichtest=[1,2]):
 		'''
@@ -500,26 +553,6 @@ class Keithley_236(Instrument):
 		self.write('P{:d}X'.format(val))
 		return True
 
-	def _set_trigger(self, trig):
-		'''
-		Set trigger source, input trigger timing, output trigger timing
-		and whether to generate a trigger pulse at the end of a sweep.
-		Arguments (all optional):
-			src:   input trigger source
-			t_in:  input trigger timing
-			t_out: output trigger timing
-			end:   whether or not to generate an output trigger at the
-			       end of a sweep
-		Arguments must be tupled, and None values must be inserted at
-		the positions of any arguments you do not want to provide.
-		'''
-		(src, t_in, t_out, end) = trig
-		if type(end) is bool:
-			end = int(end)
-		self.write('T{:s},{:s},{:s},{:s}X'.format(
-				_opt(src), _opt(t_in), _opt(t_out), _opt(end)))
-		return True
-
 	def do_set_trigger_origin(self, orig):
 		'''Set the trigger origin'''
 		self._set_trigger((orig, None, None, None))
@@ -545,6 +578,13 @@ class Keithley_236(Instrument):
 	def do_set_compliance(self, compliance):
 		self.write('L{:.2E},X'.format(compliance))
 
+	def do_set_operate(self, operate):
+		'''Set the SMU in operate or standby mode'''
+		self.write('N{:d}X'.format(operate))
+
+	# Getters
+	#########
+
 	def do_get_error(self):
 		'''Read the error condition and return as int representing flags.'''
 		return self._get_errwarn(1, _REGEX_STATUS1)
@@ -553,38 +593,8 @@ class Keithley_236(Instrument):
 		'''Read the warning condition and return as int representing flags.'''
 		return self._get_errwarn(9, _REGEX_STATUS9)
 
-	def do_set_operate(self, operate):
-		'''Set the SMU in operate or standby mode'''
-		self.write('N{:d}X'.format(operate))
-
-	def get_status(self, whichstatus='all'):
-		'''
-		Read one of the instrument's statuses.
-		The following statuses are available:
-			 0: Model no. and revision
-			 1: Error status word
-			 2: Stored ASCII string
-			 3: Machine status word
-			 4: Measurement parameters
-			 5: Compliance value
-			 6: Suppression value
-			 7: Calibration status word
-			 8: Defined sweep size
-			 9: Warning status word
-			10: First sweep point in compliance
-			11: Sweep measure size
-		Multiple statuses can be read by providing a list or
-		'all' as the status specifyer.
-		'''
-		if whichstatus is 'all':
-			whichstatus = list(range(12))
-		if isinstance(whichstatus, list):
-			return [self.get_status(i) for i in whichstatus]
-		else:
-			return self.ask('U{:d}X'.format(whichstatus))
-
-	def read(self):
-		'''Read a value if not in external trigger mode.'''
+	def do_get_value(self):
+		'''Get measurement value'''
 		if self.get_trigger_timing() == 0:
 			strval = self._visains.read()
 			_print('<empty> -> {:s}'.format(strval))
@@ -594,11 +604,7 @@ class Keithley_236(Instrument):
 			return float(strval)
 		except:
 			print('read failed')
-			return self.read()
-
-	def do_get_value(self):
-		'''Get measurement value'''
-		return self.read()
+			return self.do_get_value()
 
 	def do_get_compliance(self):
 		'''Get compliance value'''
@@ -702,3 +708,4 @@ class Keithley_236(Instrument):
 	def do_get_suppression(self):
 		'''Check if suppression is enabled (not implemented as parameter)'''
 		return bool(_interpret_status4(self.get_status(4))[6])
+
