@@ -234,16 +234,23 @@ class _Keithley236BaseException:
 			if warn & 2**i:
 				self.args += ('WARNING: {:s}'.format(WARNINGS[i]),)
 
-class Keithley236Error(RuntimeError, _Keithley236BaseException):
+	def __repr__(self):
+		'''
+		More readable representation presenting every individual
+		error/warning on a new line
+		'''
+		return '\n\t'.join(self.args)
+
+class Keithley236Error(_Keithley236BaseException, RuntimeError):
 	'''Keithley 236 error exception class'''
 	def __init__(self, when, err, warn):
-		RuntimeError.__init__(self, 'Error(s) while {:s}'.format(when))
+		RuntimeError.__init__(self, 'Error(s) while {:s}:'.format(when))
 		_Keithley236BaseException.__init__(self, err, warn)
 
-class Keithley236Warning(RuntimeWarning, _Keithley236BaseException):
+class Keithley236Warning(_Keithley236BaseException, RuntimeWarning):
 	'''Keithley 236 warning exception class'''
 	def __init__(self, when, warn):
-		RuntimeWarning.__init__(self, 'Warning(s) while {:s}'.format(when))
+		RuntimeWarning.__init__(self, 'Warning(s) while {:s}:'.format(when))
 		_Keithley236BaseException.__init__(self, 0, warn)
 
 
@@ -403,6 +410,7 @@ class Keithley_236(Instrument):
 		'''
 		spb = self._visains._GpibInstrument__get_stb()
 		self.write('M0,X')
+		self.check_error('checking and resetting serial poll byte')
 		return spb
 
 	def write(self, cmd):
@@ -510,27 +518,33 @@ class Keithley_236(Instrument):
 			whichtest = [whichtest]
 		cmd = ''.join(['J{:d}X'.format(i) for i in whichtest])
 		self.write(cmd)
+		self.check_error('performing self-test(s) {:}'.format(whichtest))
 
 	def do_set_bias(self, bias):
 		'''Set bias'''
 		self.write('{:s}X'.format(_set_bias_range_delay_cmd(bias=bias)))
+		self.check_error('setting bias to {:f}'.format(bias))
 
 	def do_set_output_items(self, items):
 		'''Set output items'''
 		self.write(_set_data_format_cmd(items, None, None) + 'X')
+		self.check_error('setting output item spec to {:}'.format(items))
 
 	def do_set_output_format(self, fmt):
 		'''Set output format'''
 		self.write(_set_data_format_cmd(None, fmt, None) + 'X')
+		self.check_error('setting output format to {:}'.format(fmt))
 
 	def do_set_output_lines(self, lines):
 		'''Set output format lines'''
 		self.write(_set_data_format_cmd(None, None, lines) + 'X')
+		self.check_error('setting output line spec to {:}'.format(lines))
 
 	def do_set_function(self, func):
 		'''Set the source and measurement function.'''
 		self.write('F{:d},{:d}X'.format(*func))
-		return True
+		self.check_error(
+				'setting source and measure function to {:}'.format(func))
 
 	def do_set_bias_range(self, rng):
 		'''
@@ -538,7 +552,8 @@ class Keithley_236(Instrument):
 		Note that this may or may not also affect the measurement range.
 		'''
 		self.write('{:s}X'.format(_set_bias_range_delay_cmd(rng=rng)))
-		return True
+		self.check_error(
+				'setting bias range to {:s}'.format(OPTMAP_RANGE[rng]))
 
 	def do_set_meas_range(self, rng):
 		'''
@@ -546,41 +561,52 @@ class Keithley_236(Instrument):
 		Note that this may or may not also affect the bias range.
 		'''
 		self.write('L,{:d}X'.format(rng))
-		return True
+		self.check_error(
+				'setting measurement range to {:s}'.format(OPTMAP_RANGE[rng]))
 
 	def do_set_filter(self, val):
 		'''Set filter type.'''
 		self.write('P{:d}X'.format(val))
-		return True
+		self.check_error('setting filter to {:d}'.format(val))
 
 	def do_set_trigger_origin(self, orig):
 		'''Set the trigger origin'''
 		self._set_trigger((orig, None, None, None))
+		self.check_error(
+				'setting input trigger origin to {:}'.format(orig))
 
 	def do_set_trigger_timing(self, t_in):
 		'''Set the input trigger timing'''
 		self._set_trigger((None, t_in, None, None))
+		self.check_error(
+				'setting input trigger timing to {:}'.format(t_in))
 
 	def do_set_trig_out_timing(self, t_out):
 		'''Set the output trigger timing'''
 		self._set_trigger((None, None, t_out, None))
+		self.check_error(
+				'setting output trigger timing to {:}'.format(t_out))
 
 	def do_set_trig_out_sweepend(self, end):
 		'''Set whether to generate output trigger on sweep end'''
 		self._set_trigger((None, None, None, end))
+		self.check_error(
+				'setting sweep-end output trigger to {:}'.format(end))
 
 	def do_set_delay(self, val):
 		'''Set delay after trigger before taking a measurement.'''
 		self.write('{:s}X'.format(
 				_set_bias_range_delay_cmd(delay=val)))
-		return True
+		self.check_error('setting delay to {:}'.format(val))
 
 	def do_set_compliance(self, compliance):
 		self.write('L{:.2E},X'.format(compliance))
+		self.check_error('setting compliance to {:.2e}'.format(compliance))
 
 	def do_set_operate(self, operate):
 		'''Set the SMU in operate or standby mode'''
 		self.write('N{:d}X'.format(operate))
+		self.check_error('setting bias range to {:}'.format(operate))
 
 	# Getters
 	#########
