@@ -384,8 +384,8 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         #x = self.get_target_vectorX()
         #y = self.get_target_vectorY()
         #z = self.get_target_vectorZ()
-        x=0
-        y=0
+        x=self._x
+        y=self._y
         if channel=='X':
             command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,y,z)
         if channel=='Y':

@@ -90,7 +90,8 @@ def sweep_gen_helper(xs,**lopts):
 
 
 def createCombinedFromAxes(axes):
-	combined = qt.instruments.create('combined','virtual_composite')
+	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
+	combined = qt.instruments.create('combined_parspace','virtual_composite')
 	tocombine=axes
 	master=None
 	res=[]
@@ -102,6 +103,7 @@ def createCombinedFromAxes(axes):
 				'parameter': p.module_options['var'],
 				'scale': 1.,
 				'offset': 0}
+			res.append(a)
 		else:
 			scale = (p.begin - p.end) / (master.begin - master.end)
 			offset = p.begin - scale*master.begin
@@ -111,10 +113,15 @@ def createCombinedFromAxes(axes):
 				'scale': scale,
 				'offset': -offset}
 				
-		res.append(a)
-# 	print res
-	combined.add_variable_combined('test',res)	
-	return combined
+			res.append(a)
+	combined.add_variable_combined('value',res)
+	import copy
+	p = copy.deepcopy(master)
+	p.label = ' + '.join([i.label for i in axes])
+	print p.label
+	p.instrument = 'combined_parspace' 
+	p.module_options['var'] = 'value'
+	return p
 			
 class param(object):
 	def __init__(self):
@@ -349,18 +356,12 @@ class parspace(object):
 		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 
 			#handle an abort with some grace for hdf5 et.al.
-			dat.close()
+# 			data.close()
+			
+			print 'Wrapped up the datafiles'
+		finally:
+			data.close_file()
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
-			print 'Wrapped up the datafiles'
-			raise
-
-
-		data.close_file()
-# 		dat.close()
-		from lib.file_support.spyview import SpyView
-		SpyView(data).write_meta_file()
-		
-		qt.mend()
-		print 'measurement ended'
-		
+			qt.mend()
+			print 'measurement ended'
