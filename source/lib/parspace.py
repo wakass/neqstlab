@@ -71,7 +71,9 @@ def sweep_gen_helper(xs,**lopts):
 	x = xs[0]
 	u = np.arange(x.begin,x.end,x.stepsize)
 	
-	u = np.linspace(x.begin,x.end,np.abs((x.end-x.begin)/x.stepsize) +1)
+	u = np.linspace(x.begin,x.end,round(np.abs((x.end-x.begin)/x.stepsize) +1)) #round here because we need an integer and not a weird outcome like ((.5-.2)/.1)==2.99999996..wtf
+	
+	#print x.end,x.begin,x.stepsize,(x.end-x.begin)/x.stepsize
 	if 'flipbit' in lopts and lopts['flipbit'] == 1:
 		u = np.flipud(u)
 	if len(xs) > 1:
@@ -209,6 +211,7 @@ class parspace(object):
 	def traverse(self):
 		#traverse the defined parameter space, using e.g. a space filling curve defined in self.traverse_func
 		instruments = []
+		beginSweep = True
 		for x in self.xs:
 			instr = qt.instruments.get_instruments()[x.instrument]
 			
@@ -284,9 +287,11 @@ class parspace(object):
 						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						instr = instruments[x]
 						value = i[x] / module_options['gain']
-						
 						if 'setalways' in module_options and module_options['setalways'] == 0:
-							if 'newblock' in dp and dp['newblock'] == 1:
+							if beginSweep:
+								beginSweep = False
+								#print 'beginning of sweep'
+								#print functocall
 								functocall(value)
 								
 								#after setting of variable call another function
@@ -300,8 +305,8 @@ class parspace(object):
 								if 'readywhen' in module_options:
 									checkvar = module_options['readywhen']
 									(var,value) = checkvar
-									print var
-									print value
+									
+									#print value
 									func = getattr(instr,'get_%s'%var)
 									while func() != value:
 										#print 'polling'
@@ -309,11 +314,25 @@ class parspace(object):
 										sleep(1)
 						else:
 							functocall(value)
+
+							# wait for setpoint to be reached
+							if 'readywhen' in module_options:
+								checkvar = module_options['readywhen']
+								(var,value) = checkvar
+								#print var
+								#print value
+								func = getattr(instr,'get_%s'%var)
+								while func() != value:
+									#print 'polling'
+									#print func()
+									sleep(0.01)
+							
+							
 						
 						
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e				
-				
+					print e
 				if hasattr(self.zs[0],'module_options'):
 					if 'measure_wait' in self.zs[0].module_options:
 						mwait = self.zs[0].module_options['measure_wait']
@@ -340,16 +359,21 @@ class parspace(object):
 					#fixme
 					if 'newblock' in dp and dp['newblock'] == 1:
 						data.new_block()
-						if qt.flow.get_live_update():
+						if qt.flow.get_live_plot():
 							plot2d.update()
+						beginSweep = True
+						
 				except Exception as e:
-					print e
+					print 'why is there ane xception???'					
+					print e.__doc__
+					print e.message
+					
 				
 				qt.msleep(0.001)
 		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 
 			#handle an abort with some grace for hdf5 et.al.
-			dat.close()
+			#dat.close()
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
 			print 'Wrapped up the datafiles'
