@@ -139,6 +139,7 @@ def createCombinedFromAxes(axes):
 	combined.add_variable_combined('value',res)
 	import copy
 	p = copy.deepcopy(master)
+	p.combined_parameters =res
 	p.label = ' + '.join([i.label for i in axes])
 	print p.label
 	p.instrument = 'combined_parspace' 
@@ -373,16 +374,7 @@ class parspace(object):
 	
 				allmeas = np.hstack((i,r))
 				print allmeas
-				
-				#get keys for all dimensions
-# 				kz = grp.group.keys()
-				#write to them
-				##todo: check if dataset exceeded
-				##expand dataset every time with 100?
-				#temporarily stop writing hdf5
-				#for i in range(len(kz)):
-				#	grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
-				
+								
 				data.add_data_point(*allmeas)
 				#read out the control bit if it exists..
 				#only used for communicating to plot3d and gnuplot to start a new datablock
@@ -398,8 +390,6 @@ class parspace(object):
 				qt.msleep(0.001)
 		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 
-			#handle an abort with some grace for hdf5 et.al.
-# 			data.close()
 			
 			print 'Wrapped up the datafiles'
 		finally:

@@ -50,7 +50,7 @@ ax3.label = 'z'
 ax3.instrument='dsgen3'
 
 
-
+ax4 = ps.createCombinedFromAxes([ax1,ax2])
 
 z = ps.param()
 z.label = 'value'
