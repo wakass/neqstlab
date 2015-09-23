@@ -419,8 +419,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
                 command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,val,z)
             if channel=='Z':
                 command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,y,val)
-        
-            
+                 
         result = self._execute(command)
        # print result
     
