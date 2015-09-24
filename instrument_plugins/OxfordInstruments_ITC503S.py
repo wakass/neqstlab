@@ -78,7 +78,8 @@ class OxfordInstruments_ITC503S(Instrument):
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,minval=0, maxval=10)
         self.add_parameter('d', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,minval=0, maxval=1)
-
+        self.add_parameter('heater_setpoint', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,minval=0, maxval=50)
         self.add_parameter('T_setpoint', type=types.FloatType,
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,minval=0, maxval=50)
         self.add_parameter('remote_status', type=types.IntType,
@@ -236,6 +237,8 @@ class OxfordInstruments_ITC503S(Instrument):
         self._execute('D%s' % d)
     def do_set_T_setpoint(self, T):
         self._execute('T%s' % T)
+    def do_set_heater_setpoint(self, T):
+        self._execute('O%s' % T)
 		
     def do_get_p(self):
         logging.info(__name__ + ' : Read Proportional')
@@ -253,6 +256,11 @@ class OxfordInstruments_ITC503S(Instrument):
         logging.info(__name__ + ' : Read Proportional')
         result = self._execute('R0')
         return float(result.replace('R',''))
+    def do_get_heater_setpoint(self):
+        logging.info(__name__ + ' : Read Proportional')
+        result = self._execute('R5')
+        print result
+        return float(result.replace('R',''))    
     def do_get_heater(self):
         '''
         Get the switch heater status.

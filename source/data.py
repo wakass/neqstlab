@@ -26,6 +26,7 @@ import re
 import logging
 import copy
 import shutil
+import gzip
 
 from gettext import gettext as _L
 
@@ -617,6 +618,10 @@ class Data(SharedGObject):
 
         if self._file is not None:
             self._file.close()
+            with open(self.get_filepath(),'rb') as file:
+                with gzip.open(self.get_filepath()+'.gz', 'wb') as gzfile:
+                    gzfile.writelines(file)
+            #os.remove(self.get_filepath())
             self._file = None
 
         if self._stop_req_hid is not None and in_qtlab:

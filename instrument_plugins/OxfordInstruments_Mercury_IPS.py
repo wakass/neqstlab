@@ -282,11 +282,18 @@ class OxfordInstruments_Mercury_IPS(Instrument):
     def do_get_vector(self,channel):
         logging.info(__name__ + ' : Read current coordinate system')
         result = self._execute('READ:SYS:VRM:VECT')
-        parsed = (result.replace('STAT:SYS:VRM:VECT:',''))
+        res = (result.replace('STAT:SYS:VRM:VECT:',''))
         found = None
-        if self.do_get_coordinatesys() == 'CART':
+        coordsys = self.do_get_coordinatesys()
+        if coordsys == 'CART':
             tesla = re.compile(r'^\[(.*)T (.*)T (.*)T\]$')
-            found = tesla.findall(parsed)
+            found = tesla.findall(res)
+        elif coordsys == 'SPH':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)rad\]$')
+            found = tesla.findall(res)
+        elif coordsys == 'CYL':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)T\]$')
+            found = tesla.findall(res)
         else:
             logging.info(__name__ + ' : Other than cartesian not yet supported')
         #rho,theta,z, cyl
@@ -309,8 +316,18 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         res = (result.replace('STAT:SYS:VRM:TVEC:',''))
         
         found = None
-        if self.do_get_coordinatesys() == 'CART':
+        
+        print self.do_get_coordinatesys()
+        print res
+        coordsys = self.do_get_coordinatesys()
+        if coordsys == 'CART':
             tesla = re.compile(r'^\[(.*)T (.*)T (.*)T\]$')
+            found = tesla.findall(res)
+        elif coordsys == 'SPH':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)rad\]$')
+            found = tesla.findall(res)
+        elif coordsys == 'CYL':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)T\]$')
             found = tesla.findall(res)
         else:
             logging.info(__name__ + ' : Other than cartesian not yet supported')
@@ -381,18 +398,28 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         mode = 'RATE'
         rate =0.2
 
-        #x = self.get_target_vectorX()
-        #y = self.get_target_vectorY()
-        #z = self.get_target_vectorZ()
-        x=0
-        y=0
-        if channel=='X':
-            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,y,z)
-        if channel=='Y':
-            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,val,z)
-        if channel=='Z':
-            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,y,val)
-            
+        x = self.get_target_vectorX()
+        y = self.get_target_vectorY()
+        z = self.get_target_vectorZ()
+        # x=self.
+        # y=0
+        # z=self.get_
+        coordsys = self.get_coordinatesys()
+        if coordsys == 'CART':
+            if channel=='X':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,y,z)
+            if channel=='Y':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,val,z)
+            if channel=='Z':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,y,val)
+        elif coordsys == 'SPH':
+            if channel=='X':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,val,y,z)
+            if channel=='Y':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,val,z)
+            if channel=='Z':
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,y,val)
+                 
         result = self._execute(command)
        # print result
     

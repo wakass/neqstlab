@@ -7,13 +7,34 @@ import numpy as np
 from time import time,sleep
 import os
 import qt
-#import hdf5_data as h5
 
 curve = np.zeros((0,2))
 
 class Bunch:
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
+
+def _estimate_time_recur(axes, sweepback):
+	'''
+	Helper function for estimating execution time in seconds
+	Assumes rate_delay values to be in milliseconds
+	'''
+	mod = axes[0].module_options
+	# Lowest-level axis
+	if len(axes) == 1:
+		return 1e-3 * mod['rate_delay'] * np.abs(
+				(axes[0].begin - axes[0].end) / mod['rate_stepsize'])
+	# Not lowest-level axis
+	else:
+		delay_per_step = 1e-3 * mod['rate_delay'] * (
+				float(axes[0].stepsize) / mod['rate_stepsize'])
+		steps = int(np.ceil(np.abs(
+				(axes[0].begin - axes[0].end) / axes[0].stepsize)))
+		vals = steps + 1
+		if not sweepback:
+			vals = 2 * vals - 1
+		lower_level_time = _estimate_time_recur(axes[1:], sweepback)
+		return steps * delay_per_step + vals * lower_level_time
 
 #generator version of hilbert space function
 def hilbert_it(x0, y0, xi, xj, yi, yj, n):
@@ -71,7 +92,9 @@ def sweep_gen_helper(xs,**lopts):
 	x = xs[0]
 	u = np.arange(x.begin,x.end,x.stepsize)
 	
-	u = np.linspace(x.begin,x.end,np.abs((x.end-x.begin)/x.stepsize) +1)
+	u = np.linspace(x.begin,x.end,round(np.abs((x.end-x.begin)/x.stepsize) +1)) #round here because we need an integer and not a weird outcome like ((.5-.2)/.1)==2.99999996..wtf
+	
+
 	if 'flipbit' in lopts and lopts['flipbit'] == 1:
 		u = np.flipud(u)
 	if len(xs) > 1:
@@ -120,16 +143,15 @@ def createCombinedFromAxes(axes):
 				
 			res.append(a)
 	combined.add_variable_combined('value',res)
-	
+
 	import copy
 	p = copy.deepcopy(master)
-	#p.combined_parameters = res
+	p.combined_parameters =res
 	p.label = ' + '.join([i.label for i in axes])
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = 'value'
 	return p
-			
-			
+
 class param(object):
 	def __init__(self):
 		self.begin = 0
@@ -196,9 +218,11 @@ class parspace(object):
 		except:
 			raise Exception('Unknown traverse function specified')
 	
-	def estimate_time(self):
+	def estimate_time_old(self):
 		#calculate time, try at least
 		#assume no sweepback measure2D
+		# A newer function replacing this one exists, but has not yet been
+		# tested thoroughly enough for this one to be permanently removed
 		try:		
 			axes = []
 			for i in range(-2,0): #loop and sweep axis consecutively
@@ -220,9 +244,30 @@ class parspace(object):
 			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
 		except Exception as e:
 			print e
+	
+	def estimate_time(self, sweepback=False):
+		'''
+		Estimate execution time
+		Assumes rate_delay values to be im milliseconds
+		'''
+		try:		
+			seconds = _estimate_time_recur(self.xs, sweepback)
+			(minutes, seconds) = divmod(seconds, 60)
+			(hours, minutes) = divmod(minutes, 60)
+			(days, hours) = divmod(hours, 24)
+			print('Total estimated time: {:.0f}d {:.0f}h {:.0f}m {:.0f}s'
+					.format(days, hours, minutes, seconds))
+		except Exception as e:
+			print(e)
+	
 	def traverse(self):
-		#traverse the defined parameter space, using e.g. a space filling curve defined in self.traverse_func
+		'''
+		traverse the defined parameter space, using e.g. a space filling
+		curve defined in self.traverse_func
+		'''
+		
 		instruments = []
+		beginSweep = True
 		for x in self.xs:
 			instr = qt.instruments.get_instruments()[x.instrument]
 			
@@ -244,10 +289,7 @@ class parspace(object):
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
-		#dat = h5.HDF5Data(name=self.measurementname)
-	# 	grp = h5.DataGroup('my_data', dat, description='pretty wise',
-# 			greets_from='WakA') # arbitrary metadata as kw
-
+		
 		qt.mstart()
 		
 		cnt=0
@@ -258,13 +300,6 @@ class parspace(object):
 				start=i.begin,
 				end=i.end
 				)
-# 			grp.add_coordinate('X%d' % cnt, #keep track of the nth coordinate
-# 				label=i.label,
-# 				unit=i.unit,
-# 				size=abs((i.end - i.begin) / i.stepsize),
-# 				start=i.begin,
-# 				end=i.end
-# 				)
 		cnt=0
 		for i in self.zs:
 			cnt+=1
@@ -272,35 +307,43 @@ class parspace(object):
 # 			grp.add_value('Z%d' % cnt, label=i.label,unit=i.unit)
 			
 		data.create_file(user=self.user)
-        
+
+
+        #now copy the calling measurement file to the measurement folder
+		meas_dir = data.get_dir()
+		import shutil,inspect,traceback,re
+		
+		reg=re.compile('execfile\(\'(.*?)\'\)')
+		for i in traceback.extract_stack():
+			res = reg.match(i[3])
+			if res is not None:
+				script_file =  res.group(1)
+				shutil.copy(script_file, meas_dir)		
+		
+		
 		plotvaldim = len(self.xs)
 		if plotvaldim > 1:
 			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
 		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10,autoupdate=False)
 		cnt = 0
 
-		
-
-			
 		try:
 			print self.traverse_gen(self.xs)
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
-# 				print dp
 				i = dp['dp']
 
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
 						
-							
-							
+
 						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						instr = instruments[x]
 						value = i[x] / module_options['gain']
-						
 						if 'setalways' in module_options and module_options['setalways'] == 0:
-							if 'newblock' in dp and dp['newblock'] == 1:
+							if beginSweep:
+								beginSweep = False
 								functocall(value)
 								
 								#after setting of variable call another function
@@ -314,20 +357,30 @@ class parspace(object):
 								if 'readywhen' in module_options:
 									checkvar = module_options['readywhen']
 									(var,value) = checkvar
-									print var
-									print value
+									
 									func = getattr(instr,'get_%s'%var)
+									#poll the value every second until it changes
 									while func() != value:
-										#print 'polling'
-										#print func()
-										sleep(1)
+										qt.msleep(1)
 						else:
 							functocall(value)
+
+							# wait for setpoint to be reached
+							if 'readywhen' in module_options:
+								checkvar = module_options['readywhen']
+								(var,value) = checkvar
+								func = getattr(instr,'get_%s'%var)
+								
+								#poll the value until it changes
+								while func() != value:
+									qt.msleep(0.01)
+							
+							
 						
 						
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e				
-				
+					print e
 				if hasattr(self.zs[0],'module_options'):
 					if 'measure_wait' in self.zs[0].module_options:
 						mwait = self.zs[0].module_options['measure_wait']
@@ -337,16 +390,7 @@ class parspace(object):
 	
 				allmeas = np.hstack((i,r))
 				print allmeas
-				
-				#get keys for all dimensions
-# 				kz = grp.group.keys()
-				#write to them
-				##todo: check if dataset exceeded
-				##expand dataset every time with 100?
-				#temporarily stop writing hdf5
-				#for i in range(len(kz)):
-				#	grp[kz[i]] = np.append(grp[kz[i]], allmeas[i])
-				
+								
 				data.add_data_point(*allmeas)
 				#read out the control bit if it exists..
 				#only used for communicating to plot3d and gnuplot to start a new datablock
@@ -356,25 +400,22 @@ class parspace(object):
 						data.new_block()
 						if qt.flow.get_live_plot():
 							plot2d.update()
+						beginSweep = True
+						
 				except Exception as e:
-					print e
+					print 'why is there ane xception???'					
+					print e.__doc__
+					print e.message
+					
 				
 				qt.msleep(0.001)
 		except (Exception,KeyboardInterrupt) as e:
-			print 'excepted error:', e 
-			#handle an abort with some grace for hdf5 et.al.
-			#dat.close()
+			print 'excepted error:', e 			
+			print 'Wrapped up the datafiles'
+		finally:
+			data.close_file()
+
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
-			print 'Wrapped up the datafiles'
-			raise
-
-
-		data.close_file()
-# 		dat.close()
-		from lib.file_support.spyview import SpyView
-		SpyView(data).write_meta_file()
-		
-		qt.mend()
-		print 'measurement ended'
-		
+			qt.mend()
+			print 'measurement ended'
