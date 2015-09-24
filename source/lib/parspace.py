@@ -88,33 +88,47 @@ def sweep_gen_helper(xs,**lopts):
 		#add a new datablock bit at the end if the option is set	
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
 
-
 def createCombinedFromAxes(axes):
-	combined = qt.instruments.create('combined','virtual_composite')
+	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
+	combined = qt.instruments.create('combined_parspace','virtual_composite')
 	tocombine=axes
 	master=None
+	master_gain = None
 	res=[]
 	for i,p in enumerate(tocombine):
 		if i == 0:
 			master = p
+			master_gain = p.module_options['gain']
 			a= {
 				'instrument': qt.instruments.get_instruments()[p.instrument],
 				'parameter': p.module_options['var'],
 				'scale': 1.,
 				'offset': 0}
+			res.append(a)
 		else:
-			scale = (p.begin - p.end) / (master.begin - master.end)
-			offset = p.begin - scale*master.begin
+			#take care of any gain mismatches between modules
+			relative_gain = p.module_options['gain'] / master_gain
+			pbegin= p.begin/relative_gain
+			pend = p.end/relative_gain
+			scale = (pbegin - pend) / (master.begin - master.end)
+			offset = pbegin - scale*master.begin
 			a= {
 				'instrument': qt.instruments.get_instruments()[p.instrument],
 				'parameter': p.module_options['var'],
 				'scale': scale,
 				'offset': -offset}
 				
-		res.append(a)
-# 	print res
-	combined.add_variable_combined('test',res)	
-	return combined
+			res.append(a)
+	combined.add_variable_combined('value',res)
+	
+	import copy
+	p = copy.deepcopy(master)
+	#p.combined_parameters = res
+	p.label = ' + '.join([i.label for i in axes])
+	p.instrument = 'combined_parspace' 
+	p.module_options['var'] = 'value'
+	return p
+			
 			
 class param(object):
 	def __init__(self):
@@ -340,7 +354,7 @@ class parspace(object):
 					#fixme
 					if 'newblock' in dp and dp['newblock'] == 1:
 						data.new_block()
-						if qt.flow.get_live_update():
+						if qt.flow.get_live_plot():
 							plot2d.update()
 				except Exception as e:
 					print e
@@ -349,7 +363,7 @@ class parspace(object):
 		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 
 			#handle an abort with some grace for hdf5 et.al.
-			dat.close()
+			#dat.close()
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
 			print 'Wrapped up the datafiles'
