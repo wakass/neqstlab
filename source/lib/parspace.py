@@ -261,6 +261,7 @@ class parspace(object):
 		traverse the defined parameter space, using e.g. a space filling
 		curve defined in self.traverse_func
 		'''
+		
 		instruments = []
 		beginSweep = True
 		for x in self.xs:
@@ -284,6 +285,9 @@ class parspace(object):
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
+		
+		
+		print __file__
 		#dat = h5.HDF5Data(name=self.measurementname)
 	# 	grp = h5.DataGroup('my_data', dat, description='pretty wise',
 # 			greets_from='WakA') # arbitrary metadata as kw
@@ -312,7 +316,20 @@ class parspace(object):
 # 			grp.add_value('Z%d' % cnt, label=i.label,unit=i.unit)
 			
 		data.create_file(user=self.user)
-        
+
+
+        #now copy the calling measurement file to the measurement folder
+		meas_dir = data.get_dir()
+		import shutil,inspect,traceback,re
+		
+		reg=re.compile('execfile\(\'(.*?)\'\)')
+		for i in traceback.extract_stack():
+			res = reg.match(i[3])
+			if res is not None:
+				script_file =  res.group(1)
+				shutil.copy(script_file, meas_dir)		
+		
+		
 		plotvaldim = len(self.xs)
 		if plotvaldim > 1:
 			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
