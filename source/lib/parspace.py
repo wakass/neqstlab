@@ -7,7 +7,6 @@ import numpy as np
 from time import time,sleep
 import os
 import qt
-#import hdf5_data as h5
 
 curve = np.zeros((0,2))
 
@@ -95,7 +94,7 @@ def sweep_gen_helper(xs,**lopts):
 	
 	u = np.linspace(x.begin,x.end,round(np.abs((x.end-x.begin)/x.stepsize) +1)) #round here because we need an integer and not a weird outcome like ((.5-.2)/.1)==2.99999996..wtf
 	
-	#print x.end,x.begin,x.stepsize,(x.end-x.begin)/x.stepsize
+
 	if 'flipbit' in lopts and lopts['flipbit'] == 1:
 		u = np.flipud(u)
 	if len(xs) > 1:
@@ -143,7 +142,6 @@ def createCombinedFromAxes(axes):
 	p = copy.deepcopy(master)
 	p.combined_parameters =res
 	p.label = ' + '.join([i.label for i in axes])
-	print p.label
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = 'value'
 	return p
@@ -286,12 +284,6 @@ class parspace(object):
 
 		data = qt.Data(name=self.measurementname)
 		
-		
-		print __file__
-		#dat = h5.HDF5Data(name=self.measurementname)
-	# 	grp = h5.DataGroup('my_data', dat, description='pretty wise',
-# 			greets_from='WakA') # arbitrary metadata as kw
-
 		qt.mstart()
 		
 		cnt=0
@@ -302,13 +294,6 @@ class parspace(object):
 				start=i.begin,
 				end=i.end
 				)
-# 			grp.add_coordinate('X%d' % cnt, #keep track of the nth coordinate
-# 				label=i.label,
-# 				unit=i.unit,
-# 				size=abs((i.end - i.begin) / i.stepsize),
-# 				start=i.begin,
-# 				end=i.end
-# 				)
 		cnt=0
 		for i in self.zs:
 			cnt+=1
@@ -336,30 +321,23 @@ class parspace(object):
 		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10,autoupdate=False)
 		cnt = 0
 
-		
-
-			
 		try:
 			print self.traverse_gen(self.xs)
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
-# 				print dp
 				i = dp['dp']
 
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
 						
-							
-							
+
 						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						instr = instruments[x]
 						value = i[x] / module_options['gain']
 						if 'setalways' in module_options and module_options['setalways'] == 0:
 							if beginSweep:
 								beginSweep = False
-								#print 'beginning of sweep'
-								#print functocall
 								functocall(value)
 								
 								#after setting of variable call another function
@@ -374,12 +352,10 @@ class parspace(object):
 									checkvar = module_options['readywhen']
 									(var,value) = checkvar
 									
-									#print value
 									func = getattr(instr,'get_%s'%var)
+									#poll the value every second until it changes
 									while func() != value:
-										#print 'polling'
-										#print func()
-										sleep(1)
+										qt.msleep(1)
 						else:
 							functocall(value)
 
@@ -387,13 +363,11 @@ class parspace(object):
 							if 'readywhen' in module_options:
 								checkvar = module_options['readywhen']
 								(var,value) = checkvar
-								#print var
-								#print value
 								func = getattr(instr,'get_%s'%var)
+								
+								#poll the value until it changes
 								while func() != value:
-									#print 'polling'
-									#print func()
-									sleep(0.01)
+									qt.msleep(0.01)
 							
 							
 						
