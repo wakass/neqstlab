@@ -21,7 +21,7 @@ if [[ "$_ipython" ]]; then
     if [[ ${#version} > 10 ]]; then
         version=$("$_ipython" -Version)
     fi
-    if [ "$explicitpython2" = true ]; then
+    if [ "$isexplicitpython2" = true ]; then
         ipython2 --gui=gtk -i $basedir/source/qtlab_shell.py -- "$@"
     elif [[ "$version" < "0.11" ]]; then
         ipython -gthread $basedir/source/qtlab_shell.py -- "$@"

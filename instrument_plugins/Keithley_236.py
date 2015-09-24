@@ -45,11 +45,11 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-from instrument import Instrument
 import types
 import visa
-import numpy
 import re
+import warnings
+from instrument import Instrument
 
 # Some ENUMs
 ############
@@ -77,13 +77,72 @@ OPTMAP_RANGE = {
 	9: '100mA' }
 	# 10 = 1A for Keithley 238
 
+ERRORS = {
+	25: 'Trigger Overrun '
+		'(ignored trigger because still processing previous trigger)',
+	24: 'IDDC (illegal command)',
+	23: 'IDDCO (command with illegal option)',
+	22: 'Interlock Present '
+		'(Failed to set operate/standby or went to standby because '
+		'of interlock condition)',
+	21: 'Illegal Measure Range',
+	20: 'Illegal Source Range',
+	19: 'Invalid Sweep Mix (tried to mix pulsed and non-pulsed sweeps)',
+	18: 'Log Cannot Cross Zero '
+		'(tried to create logarithmic sweep that passes zero)',
+	17: 'Autoranging Source with Pulse Sweep',
+	16: 'In Calibration '
+		'(tried to send non-calibration command while in calibration mode)',
+	15: 'In Standby (tried to send calibration command while in standby mode)',
+	14: 'Unit is a 236 (Tried 1.1kV calibration command on Keithley 236)',
+	13: 'IOU DPRAM Failed (dual-port RAM in I/O controller failed)',
+	12: 'IOU EEROM Failed (EEROM in I/O controller failed)',
+	11: 'IOU Cal. Checksum Error '
+		'(checksum of calibration constants does not match)',
+	10: 'DPRAM Lockup '
+		'(ROM/RAM failure in source/measure controller which consequentially '
+		'does not respond to the I/O controller)',
+	 9: 'DPRAM Link Error '
+		'(Communication error in dual-port RAM between I/O controller and '
+		'source/measure controller',
+	 8: 'Cal. ADC Zero Error (Calibration constant outside expected range)',
+	 7: 'Cal. ADC Gain Error (Calibration constant outside expected range)',
+	 6: 'Cal. SRC Zero Error (Calibration constant outside expected range)',
+	 5: 'Cal. SRC Gain Error (Calibration constant outside expected range)',
+	 4: 'Cal. Common Mode Error (error calibrating common mode adjustment)',
+	 3: 'Cal. Compliance Error (compliance during calibration procedure)',
+	 2: 'Cal. Value Error '
+		'(Entered calibration constant outside '
+		'expected range for current step)',
+	 1: 'Cal. Constants Error '
+		'(Calibration constants outside limits during power-up)',
+	 0: 'Cal. Invalid Error '
+		'(compliance error during power-up, '
+		'factory initialisation DCL or SDC)' }
+
+WARNINGS = {
+	9: 'Uncalibrated (illegal calibration constants stored in EEROM)',
+	8: 'Temporary Cal '
+		'(enter or exit calibration mode when CAL LOCK is LOCKED)',
+	7: 'Value Out of Range '
+		'(bias, compliance or step size incompatible with range)',
+	6: 'Sweep buffer Filled',
+	5: 'No Sweep Points; Must Create sweep (try to modify non-existent sweep)',
+	4: 'Pulse Times Not Met',
+	3: 'Not in Remote',
+	2: 'Measurement Range Changed Due to 1kV/100mA or 110V/1A Range Select',
+	1: 'Measurement Overflow (OFLO) / Sweep Aborted',
+	0: 'Pending Trigger (trigger sent while processing other command)' }
+
 # Regular expressions
 #####################
+_REGEX_STATUS1 = re.compile('ERS([01]{26})')
 _REGEX_STATUS3 = re.compile('MSTG(0\d|1[1-5]),([0-4]),([0-2])'
 		'K([0-3])M([01]\d{2}),([01])N([01])R([01])'
 		'T([0-4]),([0-8]),([0-8]),([01])V([01])Y([0-4])')
 _REGEX_STATUS4 = re.compile('[IV]MPL,(0\d|10)F([01]),([01])'
 		'O([01])P([0-5])S([0-3])W([01])Z([01])')
+_REGEX_STATUS9 = re.compile('ERS([01]{10})')
 
 def _interpret_status3(s):
 	'''((G1,G2,G3), K, (M1,M2), N, R, (T1,T2,T3,T4), V, Y)'''
@@ -137,6 +196,9 @@ def _opt(val, enum=None):
 	else:
 		return '' if val is None else str(val)
 
+def _print(s):
+	pass
+
 # Some command generators, all excluding the trailing X that would lead
 # to immediate execution
 #######################################################################
@@ -152,12 +214,57 @@ def _set_data_format_cmd(items=None, fmt=None, lines=None):
 	return 'G{:s},{:s},{:s}'.format(_opt(items, OUTPUT_ITEMS),
 			_opt(fmt, OUTPUT_FORMATS), _opt(lines, OUTPUT_LINES))
 
+# Exception classes
+###################
+
+class _Keithley236BaseException:
+	'''
+	Base class to generate exception from error and warning flags.
+	Should not be directly instantiated but rather extended into
+	separate error and warning classes which also has to derive from
+	BaseException or one of its subclasses. The BaseException
+	constructor should be called before the _Keithley236BaseException
+	constructor.
+	'''
+	def __init__(self, err, warn):
+		for i in ERRORS:
+			if err & 2**i:
+				self.args += ('ERROR: {:s}'.format(ERRORS[i]),)
+		for i in WARNINGS:
+			if warn & 2**i:
+				self.args += ('WARNING: {:s}'.format(WARNINGS[i]),)
+
+	def __repr__(self):
+		'''
+		More readable representation presenting every individual
+		error/warning on a new line
+		'''
+		return '\n\t'.join(self.args)
+
+class Keithley236Error(_Keithley236BaseException, RuntimeError):
+	'''Keithley 236 error exception class'''
+	def __init__(self, when, err, warn):
+		RuntimeError.__init__(self, 'Error(s) while {:s}:'.format(when))
+		_Keithley236BaseException.__init__(self, err, warn)
+
+class Keithley236Warning(_Keithley236BaseException, RuntimeWarning):
+	'''Keithley 236 warning exception class'''
+	def __init__(self, when, warn):
+		RuntimeWarning.__init__(self, 'Warning(s) while {:s}:'.format(when))
+		_Keithley236BaseException.__init__(self, 0, warn)
+
+
 # The actual class
 ##################
 
 class Keithley_236(Instrument):
-
+	'''Keithley 236 Source-Measurement Unit'''
+	
+	# Constructor
+	#############
+	
 	def __init__(self, name, address=None):
+		'''Constructor'''
 		Instrument.__init__(self, name, tags=['measure', 'sweep'])
 
 		self._address = address
@@ -249,6 +356,9 @@ class Keithley_236(Instrument):
 		self.add_parameter('error', type=types.IntType,
 				flags=Instrument.FLAG_GET)
 
+		self.add_parameter('warning', type=types.IntType,
+				flags=Instrument.FLAG_GET)
+
 		self.add_parameter('value', type=types.FloatType,
 				flags=Instrument.FLAG_GET,
 				tags=['measure'])
@@ -277,94 +387,40 @@ class Keithley_236(Instrument):
 		self.add_function('set_defaults')
 		self.add_function('self_test')
 		self.add_function('read')
-		#self.set_defaults()
+
+	# Low-level utility and private methods
+	#######################################
+	
+	def _get_errwarn(self, whichword, regex):
+		'''Get error or warning condition as int representing flags'''
+		errword = self.get_status(whichword)
+		try: 
+			err = [int(i) for i in re.match(regex, errword).group(1)]
+			return sum([2**i * err[-i-1] for i in range(len(err))])
+		except AttributeError:
+			print('Got invalid status word {:d}: {:s}'
+					.format(whichword, errword))
+
+	def get_serial_poll_byte(self):
+		'''
+		Acquire the instrument's serial poll byte and reset it by
+		writing 0 to  the SRQ mask.
+		TODO: read the actual value of the mask and write it back
+		instead of writing a default value.
+		'''
+		spb = self._visains._GpibInstrument__get_stb()
+		self.write('M0,X')
+		self.check_error('checking and resetting serial poll byte')
+		return spb
 
 	def write(self, cmd):
-		print(cmd)
-		if len(cmd) and cmd[-1] == 'X':
-			self._visains.write(self._buffered_cmd + cmd)
-			self._buffered_cmd = ''
-		else:
-			self._buffered_cmd += cmd
+		_print(cmd)
+		self._visains.write(cmd)
 
-	def set_defaults(self):
-		'''
-		Set default parameters.
-		
-		This is done by first restoring factory default values, and then
-		changing anything the author of this code likes to have different
-		by default. Note that this function reflects the author's group's
-		preferences and that other groups may want to modify this method
-		for their own implementation of QTLab.
-		'''
-		# Restore factory defaults
-		#self.self_test([0])
-
-		# Set our preferred defaults for as far as they differ from the
-		# factory defaults
-		self.set_output_items(4)
-		self.set_output_format(2)
-		self.set_output_lines(0)
-		self.set_bias_range(2)
-		self.set_bias(0)
-		self.set_meas_range(2)
-		self.set_compliance(8e-9)
-
-	def self_test(self, whichtest=[1,2]):
-		'''
-		Perform one or more self tests and/or restore factory defaults.
-		Available tests:
-			0: Restore factory defaults
-			1: Memory test
-			2: Display test
-		Default: memory test and display test
-		'''
-		if type(whichtest) is int:
-			whichtest = [whichtest]
-		cmd = ''.join(['J{:d}X'.format(i) for i in whichtest])
-		self.write(cmd)
-
-	def do_set_bias(self, bias):
-		'''Set bias'''
-		self.write('{:s}X'.format(_set_bias_range_delay_cmd(bias=bias)))
-
-	def do_set_output_items(self, items):
-		'''Set output items'''
-		self.write(_set_data_format_cmd(items, None, None) + 'X')
-
-	def do_set_output_format(self, fmt):
-		'''Set output format'''
-		self.write(_set_data_format_cmd(None, fmt, None) + 'X')
-
-	def do_set_output_lines(self, lines):
-		'''Set output format lines'''
-		self.write(_set_data_format_cmd(None, None, lines) + 'X')
-
-	def do_set_function(self, func):
-		'''Set the source and measurement function.'''
-		self.write('F{:d},{:d}X'.format(*func))
-		return True
-
-	def do_set_bias_range(self, rng):
-		'''
-		Set the bias range.
-		Note that this may or may not also affect the measurement range.
-		'''
-		self.write('{:s}X'.format(_set_bias_range_delay_cmd(rng=rng)))
-		return True
-
-	def do_set_meas_range(self, rng):
-		'''
-		Set the measurement range.
-		Note that this may or may not also affect the bias range.
-		'''
-		self.write('L,{:d}X'.format(rng))
-		return True
-
-	def do_set_filter(self, val):
-		'''Set filter type.'''
-		self.write('P{:d}X'.format(val))
-		return True
+	def ask(self, cmd):
+		ret = self._visains.ask(cmd)
+		_print('{:s} -> {:s}'.format(cmd, ret))
+		return ret
 
 	def _set_trigger(self, trig):
 		'''
@@ -385,40 +441,6 @@ class Keithley_236(Instrument):
 		self.write('T{:s},{:s},{:s},{:s}X'.format(
 				_opt(src), _opt(t_in), _opt(t_out), _opt(end)))
 		return True
-
-	def do_set_trigger_origin(self, orig):
-		'''Set the trigger origin'''
-		self._set_trigger((orig, None, None, None))
-
-	def do_set_trigger_timing(self, t_in):
-		'''Set the input trigger timing'''
-		self._set_trigger((None, t_in, None, None))
-
-	def do_set_trig_out_timing(self, t_out):
-		'''Set the output trigger timing'''
-		self._set_trigger((None, None, t_out, None))
-
-	def do_set_trig_out_sweepend(self, end):
-		'''Set whether to generate output trigger on sweep end'''
-		self._set_trigger((None, None, None, end))
-
-	def do_set_delay(self, val):
-		'''Set delay after trigger before taking a measurement.'''
-		self.write('{:s}X'.format(
-				_set_bias_range_delay_cmd(delay=val)))
-		return True
-
-	def do_set_compliance(self, compliance):
-		self.write('L{:.2E},X'.format(compliance))
-
-	def do_get_error(self):
-		'''Read the error condition and return as int representing flags.'''
-		err = [int(i) for i in self.get_status(1)[3:]]
-		return sum([2**i * err[-i-1] for i in range(len(err))])
-
-	def do_set_operate(self, operate):
-		'''Set the SMU in operate or standby mode'''
-		self.write('N{:d}X'.format(operate))
 
 	def get_status(self, whichstatus='all'):
 		'''
@@ -444,23 +466,171 @@ class Keithley_236(Instrument):
 		if isinstance(whichstatus, list):
 			return [self.get_status(i) for i in whichstatus]
 		else:
-			return self._visains.ask('U{:d}X'.format(whichstatus))
+			return self.ask('U{:d}X'.format(whichstatus))
 
-	def get_interpreted_status3(self):
-		'''()'''
+	# High-level utility methods
+	############################
+
+	def check_error(self, when):
+		'''Check for any errors and warnings and report them'''
+		(err, warn) = (self.get_error(), self.get_warning)
+		if err:
+			raise Keithley236Error(when, err, warn)
+		elif warn:
+			warnings.warn(Keithley236Warning(when, warn))
+	
+	def set_defaults(self):
+		'''
+		Set default parameters.
 		
+		This is done by first restoring factory default values, and then
+		changing anything the author of this code likes to have different
+		by default. Note that this function reflects the author's group's
+		preferences and that other groups may want to modify this method
+		for their own implementation of QTLab.
+		'''
+		# Restore factory defaults
+		#self.self_test([0])
 
-	def read(self):
-		'''Read a value if not in external trigger mode.'''
-		if self.get_trigger_timing() == 0:
-			strval = float(self._visains.read())
-		else:
-			strval = float(self._visains.ask('H0X'))
-		return float(strval)
+		# Set our preferred defaults for as far as they differ from the
+		# factory defaults
+		self.set_output_items(4)
+		self.set_output_format(2)
+		self.set_output_lines(0)
+		self.set_bias_range(2)
+		self.set_bias(0)
+		self.set_meas_range(2)
+		self.set_compliance(8e-9)
+
+	# Commands and setters
+	######################
+
+	def self_test(self, whichtest=[1,2]):
+		'''
+		Perform one or more self tests and/or restore factory defaults.
+		Available tests:
+			0: Restore factory defaults
+			1: Memory test
+			2: Display test
+		Default: memory test and display test
+		'''
+		if type(whichtest) is int:
+			whichtest = [whichtest]
+		cmd = ''.join(['J{:d}X'.format(i) for i in whichtest])
+		self.write(cmd)
+		self.check_error('performing self-test(s) {:}'.format(whichtest))
+
+	def do_set_bias(self, bias):
+		'''Set bias'''
+		self.write('{:s}X'.format(_set_bias_range_delay_cmd(bias=bias)))
+		self.check_error('setting bias to {:f}'.format(bias))
+
+	def do_set_output_items(self, items):
+		'''Set output items'''
+		self.write(_set_data_format_cmd(items, None, None) + 'X')
+		self.check_error('setting output item spec to {:}'.format(items))
+
+	def do_set_output_format(self, fmt):
+		'''Set output format'''
+		self.write(_set_data_format_cmd(None, fmt, None) + 'X')
+		self.check_error('setting output format to {:}'.format(fmt))
+
+	def do_set_output_lines(self, lines):
+		'''Set output format lines'''
+		self.write(_set_data_format_cmd(None, None, lines) + 'X')
+		self.check_error('setting output line spec to {:}'.format(lines))
+
+	def do_set_function(self, func):
+		'''Set the source and measurement function.'''
+		self.write('F{:d},{:d}X'.format(*func))
+		self.check_error(
+				'setting source and measure function to {:}'.format(func))
+
+	def do_set_bias_range(self, rng):
+		'''
+		Set the bias range.
+		Note that this may or may not also affect the measurement range.
+		'''
+		self.write('{:s}X'.format(_set_bias_range_delay_cmd(rng=rng)))
+		self.check_error(
+				'setting bias range to {:s}'.format(OPTMAP_RANGE[rng]))
+
+	def do_set_meas_range(self, rng):
+		'''
+		Set the measurement range.
+		Note that this may or may not also affect the bias range.
+		'''
+		self.write('L,{:d}X'.format(rng))
+		self.check_error(
+				'setting measurement range to {:s}'.format(OPTMAP_RANGE[rng]))
+
+	def do_set_filter(self, val):
+		'''Set filter type.'''
+		self.write('P{:d}X'.format(val))
+		self.check_error('setting filter to {:d}'.format(val))
+
+	def do_set_trigger_origin(self, orig):
+		'''Set the trigger origin'''
+		self._set_trigger((orig, None, None, None))
+		self.check_error(
+				'setting input trigger origin to {:}'.format(orig))
+
+	def do_set_trigger_timing(self, t_in):
+		'''Set the input trigger timing'''
+		self._set_trigger((None, t_in, None, None))
+		self.check_error(
+				'setting input trigger timing to {:}'.format(t_in))
+
+	def do_set_trig_out_timing(self, t_out):
+		'''Set the output trigger timing'''
+		self._set_trigger((None, None, t_out, None))
+		self.check_error(
+				'setting output trigger timing to {:}'.format(t_out))
+
+	def do_set_trig_out_sweepend(self, end):
+		'''Set whether to generate output trigger on sweep end'''
+		self._set_trigger((None, None, None, end))
+		self.check_error(
+				'setting sweep-end output trigger to {:}'.format(end))
+
+	def do_set_delay(self, val):
+		'''Set delay after trigger before taking a measurement.'''
+		self.write('{:s}X'.format(
+				_set_bias_range_delay_cmd(delay=val)))
+		self.check_error('setting delay to {:}'.format(val))
+
+	def do_set_compliance(self, compliance):
+		self.write('L{:.2E},X'.format(compliance))
+		self.check_error('setting compliance to {:.2e}'.format(compliance))
+
+	def do_set_operate(self, operate):
+		'''Set the SMU in operate or standby mode'''
+		self.write('N{:d}X'.format(operate))
+		self.check_error('setting bias range to {:}'.format(operate))
+
+	# Getters
+	#########
+
+	def do_get_error(self):
+		'''Read the error condition and return as int representing flags.'''
+		return self._get_errwarn(1, _REGEX_STATUS1)
+	
+	def do_get_warning(self):
+		'''Read the warning condition and return as int representing flags.'''
+		return self._get_errwarn(9, _REGEX_STATUS9)
 
 	def do_get_value(self):
 		'''Get measurement value'''
-		return self.read()
+		if self.get_trigger_timing() == 0:
+			strval = self._visains.read()
+			_print('<empty> -> {:s}'.format(strval))
+		else:
+			strval = self.ask('H0X')
+		try:
+			return float(strval)
+		except:
+			print('read failed')
+			return self.do_get_value()
 
 	def do_get_compliance(self):
 		'''Get compliance value'''
@@ -493,8 +663,14 @@ class Keithley_236(Instrument):
 		return _interpret_status3(self.get_status(3))[2][0]
 
 	def do_get_hit_compliance(self):
-		'''Check if measured value hits compliance value'''
-		return bool(_interpret_status3(self.get_status(3))[2][1])
+		'''
+		Check if measured value hits compliance value.
+		Note that the returned value may represent a histirocal state;
+		it will be True if the compliance has been hit at any moment
+		since the last time the serial poll byte was reset.
+		Also note that this function will reset the serial poll byte.
+		'''
+		return bool(self.get_serial_poll_byte() & 128)
 
 	def do_get_operate(self):
 		'''Check whether operating or in standby'''
@@ -558,3 +734,4 @@ class Keithley_236(Instrument):
 	def do_get_suppression(self):
 		'''Check if suppression is enabled (not implemented as parameter)'''
 		return bool(_interpret_status4(self.get_status(4))[6])
+
