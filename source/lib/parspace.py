@@ -355,31 +355,54 @@ class parspace(object):
 						if 'setalways' in module_options and module_options['setalways'] == 0:
 							if beginSweep:
 								beginSweep = False
-								functocall(value)								
+								functocall(value)	
+								#after setting of variable call another function
+								#maybe check for a list of variables in the future? in the var option
+								if 'postcall' in module_options:
+									arg = module_options['postcall']
+									if hasattr(arg, '__call__'):
+										#this is a function
+										arg(value)
+									else:
+										(var,value) = arg
+										func = getattr(instr,'set_%s'%var)
+										func(value)
+										
+								# wait for setpoint to be reached
+								if 'readywhen' in module_options:
+									checkvar = module_options['readywhen']
+									(var,value) = checkvar
+									func = getattr(instr,'get_%s'%var)
+									
+									#poll the value until it changes
+									while func() != value:
+										qt.msleep(0.5)	
+							else:
+								pass #do nothing						
 						else:
 							functocall(value)
 							
-						#after setting of variable call another function
-						#maybe check for a list of variables in the future? in the var option
-						if 'postcall' in module_options:
-							arg = module_options['postcall']
-							if hasattr(arg, '__call__'):
-								#this is a function
-								arg(value)
-							else:
-								(var,value) = arg
-								func = getattr(instr,'set_%s'%var)
-								func(value)
+							#after setting of variable call another function
+							#maybe check for a list of variables in the future? in the var option
+							if 'postcall' in module_options:
+								arg = module_options['postcall']
+								if hasattr(arg, '__call__'):
+									#this is a function
+									arg(value)
+								else:
+									(var,value) = arg
+									func = getattr(instr,'set_%s'%var)
+									func(value)
+									
+							# wait for setpoint to be reached
+							if 'readywhen' in module_options:
+								checkvar = module_options['readywhen']
+								(var,value) = checkvar
+								func = getattr(instr,'get_%s'%var)
 								
-						# wait for setpoint to be reached
-						if 'readywhen' in module_options:
-							checkvar = module_options['readywhen']
-							(var,value) = checkvar
-							func = getattr(instr,'get_%s'%var)
-							
-							#poll the value until it changes
-							while func() != value:
-								qt.msleep(0.5)
+								#poll the value until it changes
+								while func() != value:
+									qt.msleep(0.5)
 							
 							
 						
