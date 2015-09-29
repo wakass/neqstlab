@@ -326,8 +326,6 @@ class parspace(object):
 		plots_3d = []
 		plots_2d = [] 
 		for i in np.array(range(valdim))+coorddim:
-			import ipdb
-# 			ipdb.set_trace()
 			if coorddim > 1:	
 				plot3d = qt.Plot3D(data, name='measure3D_%d'%i, coorddims=(coorddim-2,coorddim-1), valdim=i, style='image')
 				plots_3d.append(plot3d)
