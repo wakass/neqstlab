@@ -321,10 +321,20 @@ class parspace(object):
 				shutil.copy(script_file, meas_dir)		
 		
 		
-		plotvaldim = len(self.xs)
-		if plotvaldim > 1:
-			plot3d = qt.Plot3D(data, name='measure3D', coorddims=(plotvaldim-2,plotvaldim-1), valdim=plotvaldim, style='image')
-		plot2d = qt.Plot2D(data, name='measure2D', coorddim=plotvaldim-1, valdim=plotvaldim, traceofs=10,autoupdate=False)
+		valdim = len(self.zs)
+		coorddim = len(self.xs)
+		plots_3d = []
+		plots_2d = [] 
+		for i in np.array(range(valdim))+coorddim:
+			import ipdb
+# 			ipdb.set_trace()
+			if coorddim > 1:	
+				plot3d = qt.Plot3D(data, name='measure3D_%d'%i, coorddims=(coorddim-2,coorddim-1), valdim=i, style='image')
+				plots_3d.append(plot3d)
+				
+			plot2d = qt.Plot2D(data, name='measure2D_%d'%i, coorddim=coorddim-1, valdim=i, traceofs=10,autoupdate=False)
+			plots_2d.append(plot2d)
+# 			break
 		cnt = 0
 
 		try:
@@ -341,39 +351,35 @@ class parspace(object):
 						functocall = getattr(instruments[x],'set_%s' % module_options['var'])
 						instr = instruments[x]
 						value = i[x] / module_options['gain']
+
 						if 'setalways' in module_options and module_options['setalways'] == 0:
 							if beginSweep:
 								beginSweep = False
-								functocall(value)
-								
-								#after setting of variable call another function
-								#maybe check for a list of variables in the future? in the var option
-								if 'postcall' in module_options:
-									(var,value) = module_options['postcall']
-									func =getattr(instr,'set_%s'%var)
-									func(value)
-								
-								#check for hold options
-								if 'readywhen' in module_options:
-									checkvar = module_options['readywhen']
-									(var,value) = checkvar
-									
-									func = getattr(instr,'get_%s'%var)
-									#poll the value every second until it changes
-									while func() != value:
-										qt.msleep(1)
+								functocall(value)								
 						else:
 							functocall(value)
-
-							# wait for setpoint to be reached
-							if 'readywhen' in module_options:
-								checkvar = module_options['readywhen']
-								(var,value) = checkvar
-								func = getattr(instr,'get_%s'%var)
+							
+						#after setting of variable call another function
+						#maybe check for a list of variables in the future? in the var option
+						if 'postcall' in module_options:
+							arg = module_options['postcall']
+							if hasattr(arg, '__call__'):
+								#this is a function
+								arg(value)
+							else:
+								(var,value) = arg
+								func = getattr(instr,'set_%s'%var)
+								func(value)
 								
-								#poll the value until it changes
-								while func() != value:
-									qt.msleep(0.01)
+						# wait for setpoint to be reached
+						if 'readywhen' in module_options:
+							checkvar = module_options['readywhen']
+							(var,value) = checkvar
+							func = getattr(instr,'get_%s'%var)
+							
+							#poll the value until it changes
+							while func() != value:
+								qt.msleep(0.5)
 							
 							
 						
@@ -386,9 +392,13 @@ class parspace(object):
 						mwait = self.zs[0].module_options['measure_wait']
 						if mwait != 0:
 							sleep(mwait)
-				r = self.zs[0].module()
-	
-				allmeas = np.hstack((i,r))
+				
+				rs = []
+				for z in self.zs:
+					r = z.module()
+					rs.append(r)
+				
+				allmeas = np.hstack((i,rs))
 				print allmeas
 								
 				data.add_data_point(*allmeas)
@@ -399,7 +409,8 @@ class parspace(object):
 					if 'newblock' in dp and dp['newblock'] == 1:
 						data.new_block()
 						if qt.flow.get_live_plot():
-							plot2d.update()
+							for plot2d in plots_2d:
+								plot2d.update()
 						beginSweep = True
 						
 				except Exception as e:

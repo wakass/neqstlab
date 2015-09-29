@@ -10,6 +10,8 @@ import lib.parspace as ps
 reload(ps)
 from math import sin
 
+
+
 ax1 = ps.param()
 ax1.begin = 1.
 ax1.end = 10.
@@ -23,6 +25,8 @@ ax1.module_options = {'dac':5,
 						'rate_stepsize':.5,
 						'rate_delay': 10.,
 						'var':'amplitude',
+						'setalways':1,
+						'postcall': some_function,
 						'gain':1. }
 
 ax2 = ps.param()
@@ -42,14 +46,19 @@ ax2.module_options = {
 						'gain':1. }
 #mag.set_activity('NPERS')
 import copy
-ax3 = copy.deepcopy(ax2)
+ax3 = copy.deepcopy(ax1)
 ax3.label = 'z'
 ax3.instrument='dsgen3'
 
 
 z = ps.param()
-z.label = 'value'
-z.module = lambda: dsgen1.get_amplitude() + dsgen2.get_amplitude() + dsgen3.get_amplitude()
+z.label = 'z_one'
+z.module = lambda: dsgen1.get_amplitude()
+
+z_set = ps.param()
+z_set.label = 'z_two'
+z_set.module = lambda: dsgen3.get_amplitude()
+
 
 import time
 b_time = time.time()
@@ -63,9 +72,11 @@ timer.label = 'time'
 timer.module = lambda: taketime()
 
 
-ax_c = ps.createCombinedFromAxes([ax1,ax2])
+
+
+ax_c = ps.createCombinedFromAxes([ax1,ax3])
 ping = ps.parspace()
-ping.add_param(ax_c)
+ping.add_param(ax1)
 
 #ping.add_param(ax1)
 
@@ -74,18 +85,17 @@ ping.add_param(ax_c)
 
 # ping.add_paramz(timer)
 ping.add_paramz(z)
+ping.add_paramz(z_set)
+
 
 #ping.set_traversefunc(lambda axes,**lopts: ps.sweep_func_helper(axes,datablock='on',**lopts))
-<<<<<<< HEAD
-ping.set_traversefuncbyname('sweep',n=8,sweepback='off')
-=======
 ping.set_traversefuncbyname('sweep',n=7,sweepback='off')
->>>>>>> 12123daf05d098ea087c4838c8e6160f1a86935a
+
 ping.traverse()
 
 #references to objects are kept so updating them is possible without re-adding
 
 ax2.end=11
 ping.estimate_time()
-ping.traverse()
+# ping.traverse()
 
