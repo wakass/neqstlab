@@ -285,7 +285,6 @@ class parspace(object):
 		except Exception as e:
 			print(e)
 		
-		
 
 	def traverse(self):
 		'''
@@ -352,15 +351,18 @@ class parspace(object):
 		coorddim = len(self.xs)
 		plots_3d = []
 		plots_2d = [] 
-		for i in np.array(range(valdim))+coorddim:
+		for j,i in enumerate(np.array(range(valdim))+coorddim):
 			if coorddim > 1:	
-				plot3d = qt.Plot3D(data, name='measure3D_%d'%i, coorddims=(coorddim-2,coorddim-1), valdim=i, style='image')
+				plot3d = qt.Plot3D(data, name='measure3D_%d'%j, coorddims=(coorddim-2,coorddim-1), valdim=i, style='image')
 				plots_3d.append(plot3d)
 				
-			plot2d = qt.Plot2D(data, name='measure2D_%d'%i, coorddim=coorddim-1, valdim=i, traceofs=10,autoupdate=False)
+			plot2d = qt.Plot2D(data, name='measure2D_%d'%j, coorddim=coorddim-1, valdim=i, traceofs=.1,autoupdate=False)
 			plots_2d.append(plot2d)
-# 			break
+
 		cnt = 0
+		#give an initial update to all 2d plots so one no longer has to push button manually
+		for plot2d in plots2d:
+			plot2d.update()
 
 		try:
 			print self.traverse_gen(self.xs)
