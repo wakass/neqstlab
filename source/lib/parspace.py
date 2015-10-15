@@ -14,12 +14,28 @@ class Bunch:
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
 
+def get_cell_value(cell):
+    return type(lambda: 0)(
+        (lambda x: lambda: x)(0).func_code, {}, None, None, (cell,)
+    )()
+    
 def _estimate_time_recur(axes, sweepback):
 	'''
 	Helper function for estimating execution time in seconds
 	Assumes rate_delay values to be in milliseconds
 	'''
 	mod = axes[0].module_options
+	
+	x=Bunch
+	x = {}
+	ax=axes[0]
+	x['time']  = np.abs(ax.begin - ax.end) / (mod['rate_stepsize'] / (mod['rate_delay']/1000.))
+	x['steps'] = np.abs(ax.begin - ax.end) / np.abs(ax.stepsize)
+	x['label'] = ax.label
+	x['range'] = np.abs(ax.begin - ax.end)
+	x['speed'] = mod['rate_stepsize'] / (mod['rate_delay']/1000.)
+	print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % x
+
 	# Lowest-level axis
 	if len(axes) == 1:
 		return 1e-3 * mod['rate_delay'] * np.abs(
@@ -35,6 +51,16 @@ def _estimate_time_recur(axes, sweepback):
 			vals = 2 * vals - 1
 		lower_level_time = _estimate_time_recur(axes[1:], sweepback)
 		return steps * delay_per_step + vals * lower_level_time
+
+def _estimate_time_hilbert(axes, n):
+	'''
+	Helper function for hilbert execution time in seconds
+	Assumes rate_delay values to be in milliseconds
+	'''
+	mod = axes[0].module_options
+	raise 'not implemented yet'
+	#euclidian length of the curve = 2^n - 1/2^n
+	
 
 #generator version of hilbert space function
 def hilbert_it(x0, y0, xi, xj, yi, yj, n):
@@ -133,7 +159,10 @@ def createCombinedFromAxes(axes):
 			relative_gain = p.module_options['gain'] / master_gain
 			pbegin= p.begin/relative_gain
 			pend = p.end/relative_gain
-			scale = (pbegin - pend) / (master.begin - master.end)
+			scale = np.abs((pbegin - pend) / (master.begin - master.end))
+			#logical or to determine direction of sweep relative to master
+			if (pbegin > pend) ^ (master.begin > master.end):
+				scale = -1*scale
 			offset = pbegin - scale*master.begin
 			a= {
 				'instrument': qt.instruments.get_instruments()[p.instrument],
@@ -147,7 +176,7 @@ def createCombinedFromAxes(axes):
 	import copy
 	p = copy.deepcopy(master)
 	p.combined_parameters =res
-	p.label = ' + '.join([i.label for i in axes])
+	p.label = ', '.join([i.label for i in axes])
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = 'value'
 	return p
@@ -214,44 +243,40 @@ class parspace(object):
 					'star' : lambda xs: star_gen(xs,*kwargs,**lopts)
 					}
 		try:
+			self.traverse_name = name
 			self.traverse_gen = functions[name]
 		except:
 			raise Exception('Unknown traverse function specified')
 	
-	def estimate_time_old(self):
-		#calculate time, try at least
-		#assume no sweepback measure2D
-		# A newer function replacing this one exists, but has not yet been
-		# tested thoroughly enough for this one to be permanently removed
-		try:		
-			axes = []
-			for i in range(-2,0): #loop and sweep axis consecutively
-				ax = self.xs[i]
-				mod = ax.module_options
-				x=Bunch
-				x = {}
-				x['time']  = np.abs(ax.begin - ax.end) / (mod['rate_stepsize'] / (mod['rate_delay']/1000.))
-				x['steps'] = np.abs(ax.begin - ax.end) / np.abs(ax.stepsize)
-				x['label'] = ax.label
-				x['range'] = np.abs(ax.begin - ax.end)
-				x['speed'] = mod['rate_stepsize'] / (mod['rate_delay']/1000.)
-				print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % x
-				axes.append(x)
-			
-			time = axes[0]['time']*axes[0]['steps']*2 + axes[0]['time']
-			import datetime
-			print time
-			print 'Total time will probably be: %s' % datetime.timedelta(seconds=time)
-		except Exception as e:
-			print e
 	
+	def taketime_interval(self):
+		diff_time = time() - self.b_time
+		self.b_time = time()
+		return diff_time
+	def taketime_reset(self):
+		self.b_time = time()
+	def taketime_passed_since_reset(self):
+		diff_time = time() - self.b_time
+		return diff_time
+
 	def estimate_time(self, sweepback=False):
 		'''
 		Estimate execution time
 		Assumes rate_delay values to be im milliseconds
 		'''
-		try:		
-			seconds = _estimate_time_recur(self.xs, sweepback)
+		#get the arguments from the traverse_gen
+		
+		try:
+			seconds = 0
+			cellvalue = get_cell_value(self.traverse_gen.func_closure[1])
+			if self.traverse_name == 'sweep':
+				if hasattr(cellvalue,'sweepback'):
+					sweepback = cellvalue['sweepback']
+				seconds = _estimate_time_recur(self.xs, sweepback)
+			if self.traverse_name == 'hilbert':
+				if hasattr(cellvalue,'n'):
+					n = cellvalue['n']
+				seconds = _estimate_time_hilbert(self.xs, n)
 			(minutes, seconds) = divmod(seconds, 60)
 			(hours, minutes) = divmod(minutes, 60)
 			(days, hours) = divmod(hours, 24)
@@ -259,7 +284,9 @@ class parspace(object):
 					.format(days, hours, minutes, seconds))
 		except Exception as e:
 			print(e)
-	
+		
+		
+
 	def traverse(self):
 		'''
 		traverse the defined parameter space, using e.g. a space filling
@@ -340,7 +367,7 @@ class parspace(object):
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
 				i = dp['dp']
-
+				
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
