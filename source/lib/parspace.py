@@ -139,7 +139,10 @@ def sweep_gen_helper(xs,**lopts):
 
 def createCombinedFromAxes(axes):
 	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
-	combined = qt.instruments.create('combined_parspace','virtual_composite')
+	if 'combined_parspace' in qt.instruments.get_instruments():
+		combined = qt.instruments.get_instruments()['combined_parspace']
+	else:
+		combined = qt.instruments.create('combined_parspace','virtual_composite')
 	tocombine=axes
 	master=None
 	master_gain = None
@@ -161,7 +164,7 @@ def createCombinedFromAxes(axes):
 			pend = p.end/relative_gain
 			scale = np.abs((pbegin - pend) / (master.begin - master.end))
 			#logical or to determine direction of sweep relative to master
-			if (pbegin > pend) ^ (master.begin > master.end):
+			if (pbegin > pend) ^ (master.begin > master.end): #xor
 				scale = -1*scale
 			offset = pbegin - scale*master.begin
 			a= {
@@ -171,14 +174,17 @@ def createCombinedFromAxes(axes):
 				'offset': -offset}
 				
 			res.append(a)
-	combined.add_variable_combined('value',res)
+	
+	value_name = ''.join([i.label for i in axes])
+	combined.add_variable_combined(value_name,res)
 
 	import copy
 	p = copy.deepcopy(master)
 	p.combined_parameters =res
 	p.label = ', '.join([i.label for i in axes])
 	p.instrument = 'combined_parspace' 
-	p.module_options['var'] = 'value'
+	p.module_options['var'] = value_name
+	qt.msleep(0.5) #allow qt to process signal handlers
 	return p
 
 class param(object):
@@ -342,6 +348,8 @@ class parspace(object):
 		reg=re.compile('execfile\(\'(.*?)\'\)')
 		for i in traceback.extract_stack():
 			res = reg.match(i[3])
+			print i
+			print res
 			if res is not None:
 				script_file =  res.group(1)
 				shutil.copy(script_file, meas_dir)		
@@ -361,7 +369,7 @@ class parspace(object):
 
 		cnt = 0
 		#give an initial update to all 2d plots so one no longer has to push button manually
-		for plot2d in plots2d:
+		for plot2d in plots_2d:
 			plot2d.update()
 
 		try:
@@ -369,7 +377,7 @@ class parspace(object):
 			for dp in self.traverse_gen(self.xs):
 				#datapoint extraction
 				i = dp['dp']
-				
+
 				try:
 					for x in range(len(self.xs)):				
 						module_options = self.xs[x].module_options
@@ -408,7 +416,7 @@ class parspace(object):
 								pass #do nothing						
 						else:
 							functocall(value)
-							
+							beginSweep = False
 							#after setting of variable call another function
 							#maybe check for a list of variables in the future? in the var option
 							if 'postcall' in module_options:
