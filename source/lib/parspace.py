@@ -345,13 +345,11 @@ class parspace(object):
 		meas_dir = data.get_dir()
 		import shutil,inspect,traceback,re
 		
-		reg=re.compile('execfile\(\'(.*?)\'\)')
+		reg=re.compile('.*.traverse\(\)')
 		for i in traceback.extract_stack():
 			res = reg.match(i[3])
-			print i
-			print res
 			if res is not None:
-				script_file =  res.group(1)
+				script_file =  i[0]
 				shutil.copy(script_file, meas_dir)		
 		
 		

@@ -119,7 +119,7 @@ class virtual_composite(Instrument):
         info = self._combine_info[varname]
         for pinfo in info:
             val = pinfo['instrument'].get(pinfo['parameter'], query=False)
-            #wtf, just get the first variable
+            #just get the first variable
             if val is not None:
                 ret += (val + pinfo['offset']) / pinfo['scale']
  
@@ -132,6 +132,7 @@ class virtual_composite(Instrument):
         for pinfo in info:
             newval = val * pinfo['scale'] - pinfo['offset']
             pinfo['instrument'].set(pinfo['parameter'], newval)
+
 
     def _instrument_changed_cb(self, sender, changes):
         for combined_name, info in self._combine_info.iteritems():
