@@ -158,15 +158,15 @@ def createCombinedFromAxes(axes):
 				'offset': 0}
 			res.append(a)
 		else:
-			#take care of any gain mismatches between modules
-			relative_gain = p.module_options['gain'] / master_gain
-			pbegin= p.begin/relative_gain
-			pend = p.end/relative_gain
-			scale = np.abs((pbegin - pend) / (master.begin - master.end))
+			scale = np.abs((p.begin - p.end) / (master.begin - master.end))*master_gain/p.module_options['gain']
+			
 			#logical or to determine direction of sweep relative to master
-			if (pbegin > pend) ^ (master.begin > master.end): #xor
+			if (p.begin > p.end) ^ (master.begin > master.end): #xor
 				scale = -1*scale
-			offset = pbegin - scale*master.begin
+
+			offset = p.begin/p.module_options['gain'] - scale*master.begin/master_gain
+			
+			
 			a= {
 				'instrument': qt.instruments.get_instruments()[p.instrument],
 				'parameter': p.module_options['var'],
@@ -184,7 +184,7 @@ def createCombinedFromAxes(axes):
 	p.label = ', '.join([i.label for i in axes])
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = value_name
-	qt.msleep(0.5) #allow qt to process signal handlers
+	qt.msleep(1.5) #allow qt to process signal handlers
 	return p
 
 class param(object):
