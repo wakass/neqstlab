@@ -158,15 +158,15 @@ def createCombinedFromAxes(axes):
 				'offset': 0}
 			res.append(a)
 		else:
-			#take care of any gain mismatches between modules
-			relative_gain = p.module_options['gain'] / master_gain
-			pbegin= p.begin/relative_gain
-			pend = p.end/relative_gain
-			scale = np.abs((pbegin - pend) / (master.begin - master.end))
+			scale = np.abs((p.begin - p.end) / (master.begin - master.end))*master_gain/p.module_options['gain']
+			
 			#logical or to determine direction of sweep relative to master
-			if (pbegin > pend) ^ (master.begin > master.end): #xor
+			if (p.begin > p.end) ^ (master.begin > master.end): #xor
 				scale = -1*scale
-			offset = pbegin - scale*master.begin
+
+			offset = p.begin/p.module_options['gain'] - scale*master.begin/master_gain
+			
+			
 			a= {
 				'instrument': qt.instruments.get_instruments()[p.instrument],
 				'parameter': p.module_options['var'],
@@ -184,8 +184,45 @@ def createCombinedFromAxes(axes):
 	p.label = ', '.join([i.label for i in axes])
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = value_name
-	qt.msleep(0.5) #allow qt to process signal handlers
+	qt.msleep(1.5) #allow qt to process signal handlers
 	return p
+	
+def createCompositeParametricFromAxes(value_name,axes):
+	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
+	if 'combined_parametric' in qt.instruments.get_instruments():
+		combined = qt.instruments.get_instruments()['combined_parametric']
+	else:
+		combined = qt.instruments.create('combined_parametric','virtual_composite_parametric')
+	tocombine=axes
+	master=None
+	master_gain = None
+	res=[]
+	for i,p in enumerate(tocombine):
+		a= {
+			'instrument': qt.instruments.get_instruments()[p.instrument],
+			'parameter': p.module_options['var'],
+			'function': p.module_options['function'],
+			'gain': p.module_options['gain']
+			}
+		res.append(a)
+		#take care of any gain mismatches between modules
+		relative_gain = p.module_options['gain'] / master_gain
+		pbegin= p.begin/relative_gain
+		pend = p.end/relative_gain
+		scale = np.abs((pbegin - pend) / (master.begin - master.end))
+	
+	combined.add_variable_combined(value_name,res)
+
+	import copy
+	p = copy.deepcopy(master)
+	p.combined_parameters = res
+	p.label = value_name
+	p.module_options['gain']=1.0 #no gain for a parametric variable
+	p.instrument = 'combined_parametric' 
+	p.module_options['var'] = value_name
+	qt.msleep(1.5) #allow qt to process signal handlers
+	return p
+
 
 class param(object):
 	def __init__(self):
@@ -377,7 +414,7 @@ class parspace(object):
 				i = dp['dp']
 
 				try:
-					for x in range(len(self.xs)):				
+					for x in range(len(self.xs)):
 						module_options = self.xs[x].module_options
 						
 
@@ -414,7 +451,6 @@ class parspace(object):
 								pass #do nothing						
 						else:
 							functocall(value)
-							beginSweep = False
 							#after setting of variable call another function
 							#maybe check for a list of variables in the future? in the var option
 							if 'postcall' in module_options:
@@ -480,9 +516,15 @@ class parspace(object):
 			print 'excepted error:', e 			
 			print 'Wrapped up the datafiles'
 		finally:
+			meas_dir = data.get_dir()
 			data.close_file()
 
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
 			qt.mend()
+			import subprocess
+			from lib.config import get_shared_config
+			user= get_shared_config().get('user')
+			
+			subprocess.call(['c:/qtlab/rsync.bat',user])
 			print 'measurement ended'
