@@ -93,7 +93,7 @@ class virtual_composite_parametric(Instrument):
     def _set_combined(self, varname, val):
         info = self._combine_info[varname]
         for pinfo in info:
-            newval = pinfo['function'](val)
+            newval = pinfo['function'](val) / pinfo['gain']
             pinfo['instrument'].set(pinfo['parameter'], newval)
 
 
