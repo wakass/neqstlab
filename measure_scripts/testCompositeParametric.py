@@ -4,34 +4,66 @@
 
 dsgen1 = qt.instruments.create('dsgen1', 'dummy_signal_generator')
 dsgen2 = qt.instruments.create('dsgen2', 'dummy_signal_generator')
-combined_arb = qt.instruments.create('arb', 'virtual_composite_arbitrary')
-qt.msleep(1.5) #allow for instruments to be registered
-dsgen1.set_parameter_rate('amplitude',100,10)
-dsgen2.set_parameter_rate('amplitude',100,10)
+combined_arb = qt.instruments.create('arb', 'virtual_composite_parametric')
+
+
 
 import lib.parspace as ps
 reload(ps)
 from math import sin,pi
 
 
-
-f1 = lambda x: sin(x+0.2*pi)
-f2 = lambda x: sin(x+0.5*pi)
+#numbers not accounting for gain (i.e. real output)
+f1 = lambda x: 50*sin(x+0.2*pi) + 200
+f2 = lambda x: 50*sin(x+0.5*pi) + 200
 
 a= {
 	'instrument': dsgen1,
 	'parameter': 'amplitude',
-	'function': f1
+	'function': f1,
+	'gain':5.
 	}
 b= {
 	'instrument': dsgen2,
 	'parameter': 'amplitude',
-	'function': f2
+	'function': f2,
+	'gain':5.
 	}
 
 combined_arb.add_variable_combined('phase',[a,b])
+qt.msleep(1.5) #allow for instruments to be registered
 
 
+#safety maximum sweeps when the instruments are ill-defined
+dsgen1.set_parameter_rate('amplitude',20,10)
+dsgen2.set_parameter_rate('amplitude',20,10)
+
+ds1=ps.param()
+ds1.label ='amplitude'
+ds1.instrument = 'dsgen1'
+ds1.module_options ={ 
+						'rate_stepsize':.02,
+						'rate_delay': 100.,
+						'var':'amplitude',
+						'gain': 5.,
+						'function': f1
+							}
+							
+ds2=ps.param()
+ds2.label ='amplitude'
+ds2.instrument = 'dsgen2'
+ds2.module_options ={ 
+						'rate_stepsize':.02,
+						'rate_delay': 100.,
+						'var':'amplitude',
+						'gain': 1.,
+						'function':f2
+							}
+
+phasebyAxes =  ps.createCompositeParametricFromAxes('phase',[ds1,ds2])
+phasebyAxes.begin = 0.
+phasebyAxes.end = 2*pi
+phasebyAxes.stepsize = 2*pi /5
 
 phase=ps.param()
 phase.label ='phase'
