@@ -138,7 +138,6 @@ def sweep_gen_helper(xs,**lopts):
 # 		if 'datablock' in lopts and lopts['datablock' == 'on'
 
 def createCombinedFromAxes(axes):
-	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
 	if 'combined_parspace' in qt.instruments.get_instruments():
 		combined = qt.instruments.get_instruments()['combined_parspace']
 	else:
@@ -185,39 +184,30 @@ def createCombinedFromAxes(axes):
 	p.instrument = 'combined_parspace' 
 	p.module_options['var'] = value_name
 	qt.msleep(1.5) #allow qt to process signal handlers
+
 	return p
-	
+
 def createCompositeParametricFromAxes(value_name,axes):
-	#probably bug if multiple instrument with same name exist they get overwritten, potentially very annoying/dangerous
 	if 'combined_parametric' in qt.instruments.get_instruments():
 		combined = qt.instruments.get_instruments()['combined_parametric']
 	else:
 		combined = qt.instruments.create('combined_parametric','virtual_composite_parametric')
-	tocombine=axes
-	master=None
-	master_gain = None
 	res=[]
-	for i,p in enumerate(tocombine):
+	for i,p in enumerate(axes):
 		a= {
 			'instrument': qt.instruments.get_instruments()[p.instrument],
 			'parameter': p.module_options['var'],
 			'function': p.module_options['function'],
 			'gain': p.module_options['gain']
 			}
-		res.append(a)
-		#take care of any gain mismatches between modules
-		relative_gain = p.module_options['gain'] / master_gain
-		pbegin= p.begin/relative_gain
-		pend = p.end/relative_gain
-		scale = np.abs((pbegin - pend) / (master.begin - master.end))
-	
+		res.append(a)	
 	combined.add_variable_combined(value_name,res)
 
 	import copy
-	p = copy.deepcopy(master)
+	p = copy.deepcopy(axes[0])
 	p.combined_parameters = res
 	p.label = value_name
-	p.module_options['gain']=1.0 #no gain for a parametric variable
+	p.module_options['gain'] = 1.0 #no gain for a parametric variable
 	p.instrument = 'combined_parametric' 
 	p.module_options['var'] = value_name
 	qt.msleep(1.5) #allow qt to process signal handlers
