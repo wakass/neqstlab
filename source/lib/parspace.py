@@ -269,8 +269,6 @@ class parspace(object):
 		self.traverse_func = func
 		
 	def set_traversefuncbyname(self, name, *kwargs,**lopts):
-# 		if isempty(self.xs):
-# 			raise Exception('Define all your axes before choosing a traverse function')
 		functions = {'hilbert':	 lambda xs: hilbert_mul(xs,*kwargs,**lopts),
 					'sweep': lambda xs: sweep_gen(xs,*kwargs,**lopts),
 					'star' : lambda xs: star_gen(xs,*kwargs,**lopts)
@@ -297,17 +295,16 @@ class parspace(object):
 		Estimate execution time
 		Assumes rate_delay values to be im milliseconds
 		'''
-		#get the arguments from the traverse_gen
-		
+		#get the arguments from the traverse_gen	
 		try:
 			seconds = 0
 			cellvalue = get_cell_value(self.traverse_gen.func_closure[1])
 			if self.traverse_name == 'sweep':
-				if hasattr(cellvalue,'sweepback'):
+				if 'sweepback' in cellvalue:
 					sweepback = cellvalue['sweepback']
 				seconds = _estimate_time_recur(self.xs, sweepback)
 			if self.traverse_name == 'hilbert':
-				if hasattr(cellvalue,'n'):
+				if 'n' in cellvalue:
 					n = cellvalue['n']
 				seconds = _estimate_time_hilbert(self.xs, n)
 			(minutes, seconds) = divmod(seconds, 60)
