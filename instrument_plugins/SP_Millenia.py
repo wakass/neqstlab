@@ -18,7 +18,7 @@
 
 from instrument import Instrument
 import types
-import visa
+import qtvisa as visa
 import logging
 import re
 

@@ -17,7 +17,7 @@
 
 from instrument import Instrument
 import types
-import visa
+import qtvisa as visa
 
 class Coherent_Verdi(Instrument):
 

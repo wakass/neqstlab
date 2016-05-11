@@ -18,7 +18,7 @@
 from instrument import Instrument
 import types
 import logging
-import visa
+import qtvisa as visa
 import time
 
 class Newport_ESP100(Instrument):

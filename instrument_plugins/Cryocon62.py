@@ -18,7 +18,7 @@
 
 from instrument import Instrument
 import types
-import visa
+import qtvisa as visa
 from time import sleep
 import logging
 

@@ -21,7 +21,7 @@ import types
 import logging
 import numpy as np
 from time import sleep
-import visa
+import qtvisa as visa
 
 class EGandG_Model5209(Instrument):
    '''

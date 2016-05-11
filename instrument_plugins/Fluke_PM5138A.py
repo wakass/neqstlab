@@ -18,7 +18,7 @@
 from instrument import Instrument
 import types
 import logging
-import visa
+import qtvisa as visa
 
 class Fluke_PM5138A(Instrument):
   '''

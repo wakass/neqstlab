@@ -21,7 +21,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 from instrument import Instrument
-import visa
+import qtvisa
 import types
 import logging
 import numpy
@@ -72,7 +72,7 @@ class Keithley_2000(Instrument):
 
         # Add some global constants
         self._address = address
-        self._visainstrument = visa.instrument(self._address)
+        self._visainstrument = qtvisa.instrument(self._address)
         try:
             self._visainstrument.read_termination = '\n'
             self._visainstrument.write_termination = '\n'

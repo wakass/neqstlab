@@ -41,7 +41,7 @@ def set_visa(name):
         if name == "pyvisa":
             from pyvisa import visa as module
             instrument=module.instrument
-        if name == 'visa':
+        elif name == 'visa':
             import imp
             fp, pathname, description = imp.find_module(name)
             try:
@@ -65,7 +65,9 @@ if platform.system() == 'Linux':
    visa_provider = 'visa' 
 else:
    visa_provider = 'pyvisa'
-set_visa('pyvisa')
+import ipdb
+ipdb.set_trace()
+set_visa(visa_provider)
 
 class TcpIpInstrument:
     '''

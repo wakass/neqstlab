@@ -20,7 +20,7 @@
 
 from instrument import Instrument
 import types
-import visa
+import qtvisa as visa
 import pyvisa.vpp43 as vpp43
 import qt
 import logging

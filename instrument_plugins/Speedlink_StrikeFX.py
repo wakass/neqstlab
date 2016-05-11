@@ -21,7 +21,7 @@ from instrument import Instrument
 import types
 import logging
 import numpy
-import visa
+import qtvisa as visa
 import time as time
 import qt
 

@@ -22,7 +22,7 @@
 
 from instrument import Instrument
 from time import time, sleep
-#import visa
+#import qtvisa as visa
 import pyvisa.visa as visa
 import types
 import logging
@@ -76,8 +76,9 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         self._address = address
         self._visainstrument = visa.instrument(self._address,timeout=20)
         self._values = {}
-        self._visainstrument.term_chars = '\r\n'
-
+        
+        self._visainstrument.read_termination = '\r\n'
+        self._visainstrument.write_termination = '\r\n'
         #Add parameters
         
         #x,y,z -> enter setpoint
