@@ -22,7 +22,6 @@
 
 from instrument import Instrument
 from time import time, sleep
-#import qtvisa as visa
 import pyvisa.visa as visa
 import types
 import logging

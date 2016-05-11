@@ -65,8 +65,6 @@ if platform.system() == 'Linux':
    visa_provider = 'visa' 
 else:
    visa_provider = 'pyvisa'
-import ipdb
-ipdb.set_trace()
 set_visa(visa_provider)
 
 class TcpIpInstrument:
