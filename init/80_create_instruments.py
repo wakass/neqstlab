@@ -1,8 +1,8 @@
-example1 = qt.instruments.create('example1', 'example', address='GPIB::1', reset=True)
-dsgen = qt.instruments.create('dsgen', 'dummy_signal_generator')
-pos = qt.instruments.create('pos', 'dummy_positioner')
-combined = qt.instruments.create('combined', 'virtual_composite')
-combined.add_variable_scaled('magnet', example1, 'chA_output', 0.02, -0.13, units='mT')
+#example1 = qt.instruments.create('example1', 'example', address='GPIB::1', reset=True)
+#dsgen = qt.instruments.create('dsgen', 'dummy_signal_generator')
+#pos = qt.instruments.create('pos', 'dummy_positioner')
+#combined = qt.instruments.create('combined', 'virtual_composite')
+#combined.add_variable_scaled('magnet', example1, 'chA_output', 0.02, -0.13, units='mT')
 #combined.add_variable_combined('waveoffset', [{
 #    'instrument': dmm1,
 #    'parameter': 'ch2_output',
@@ -13,3 +13,7 @@ combined.add_variable_scaled('magnet', example1, 'chA_output', 0.02, -0.13, unit
 #    'scale': 0.5,
 #    'offset': 0
 #    }], format='%.04f')
+
+
+keith = qt.instruments.create('keith','Keithley_2000',address='GPIB::17')
+eefje = qt.instruments.create('eefje','IVVI',address='ASRL/dev/ttyUSB0::INSTR')

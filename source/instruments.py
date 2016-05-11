@@ -280,7 +280,14 @@ class Instruments(SharedGObject):
             self.remove(name)
 
         # Set VISA provider
-        visa_driver = kwargs.get('visa', 'pyvisa')
+        # Make a guess for the default visa provider, linux or windows
+        import platform
+        if platform.system() == 'Linux':
+           visa_provider = 'visa' 
+        else:
+           visa_provider = 'pyvisa'
+
+        visa_driver = kwargs.get('visa', visa_provider)
         import visa
         visa.set_visa(visa_driver)
 
@@ -303,7 +310,6 @@ class Instruments(SharedGObject):
         self.add(ins, create_args=kwargs)
         self.emit('instrument-added', name)
         return self.get(name)
-
     def reload_module(self, instype):
         module = _get_driver_module(instype, do_reload=True)
         return module is not None

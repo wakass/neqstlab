@@ -15,6 +15,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
+
 import logging
 import socket
 import select
@@ -26,6 +27,7 @@ except:
 
 _drivers = (
     'pyvisa',
+    'visa',
     'prologix_ethernet'
 )
 
@@ -34,15 +36,35 @@ def set_visa(name):
         raise ValueError('Unknown VISA provider: %s', name)
 
     try:
+        global instrument 
+
         if name == "pyvisa":
             from pyvisa import visa as module
+            instrument=module.instrument
+        if name == 'visa':
+            import imp
+            fp, pathname, description = imp.find_module(name)
+            try:
+                module = imp.load_module(name, fp, pathname, description)
+            finally:
+                if fp:
+                    fp.close()   
+                     
+            instrument = module.ResourceManager('@py')
+            instrument = instrument.open_resource
         else:
             module = __import__(name)
-        global instrument
-        instrument = module.instrument
+            instrument = module.instrument
     except:
         logging.warning('Unable to load visa driver %s', name)
 
+# Set VISA provider
+# Make a guess for the default visa provider, linux or windows
+import platform
+if platform.system() == 'Linux':
+   visa_provider = 'visa' 
+else:
+   visa_provider = 'pyvisa'
 set_visa('pyvisa')
 
 class TcpIpInstrument:

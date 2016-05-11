@@ -18,9 +18,12 @@
 import time
 import logging
 import warnings
+from pyvisa import constants
+
 try:
-    from visa import *
-    from pyvisa import vpp43
+    import visa
+    rm=visa.ResourceManager('@py')
+    lib = rm.visalib
 except:
     logging.warning('VISA not available')
 
@@ -28,8 +31,8 @@ def get_navail(visains):
     '''
     Return number of bytes available to read from visains.
     '''
-    return vpp43.get_attribute(visains, vpp43.VI_ATTR_ASRL_AVAIL_NUM)
-
+    bytes,status = lib.get_attribute(visains, constants.VI_ATTR_ASRL_AVAIL_NUM)
+    return bytes
 def wait_data(visains, nbytes=1, maxdelay=1.0):
     '''
     Wait for maxdelay seconds for data available to read from visains.
@@ -43,8 +46,8 @@ def wait_data(visains, nbytes=1, maxdelay=1.0):
     return False
 
 def readn(visains, n):
-    return vpp43.read(visains, n)
-
+    data, status = lib.read(visains, n) #return the real data, not the (data,status-code) tuple
+    return data
 _added_filter = False
 def read_all(visains):
     """
@@ -61,7 +64,7 @@ def read_all(visains):
         buf = ""
         blen = get_navail(visains)
         while blen > 0:
-            chunk = vpp43.read(visains, blen)
+            chunk,status = lib.read(visains, blen)
             buf += chunk
             blen = get_navail(visains)
     except:

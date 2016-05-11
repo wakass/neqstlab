@@ -19,7 +19,10 @@
 
 from instrument import Instrument
 import types
-import pyvisa.vpp43 as vpp43
+
+from pyvisa import constants
+import visa
+vpp43 = visa.ResourceManager('@py').visalib
 from time import sleep
 import logging
 import numpy
@@ -123,17 +126,17 @@ class IVVI(Instrument):
             None
         '''
         logging.debug('Opening serial connection')
-        self._session = vpp43.open_default_resource_manager()
-        self._vi = vpp43.open(self._session, self._address)
+        self._session,status = vpp43.open_default_resource_manager()
+        self._vi,status = vpp43.open(self._session, self._address)
 
-        vpp43.set_attribute(self._vi, vpp43.VI_ATTR_ASRL_BAUD, 115200)
-        vpp43.set_attribute(self._vi, vpp43.VI_ATTR_ASRL_DATA_BITS, 8)
-        vpp43.set_attribute(self._vi, vpp43.VI_ATTR_ASRL_STOP_BITS,
-            vpp43.VI_ASRL_STOP_ONE)
-        vpp43.set_attribute(self._vi, vpp43.VI_ATTR_ASRL_PARITY,
-            vpp43.VI_ASRL_PAR_ODD)
-        vpp43.set_attribute(self._vi, vpp43.VI_ATTR_ASRL_END_IN,
-            vpp43.VI_ASRL_END_NONE)
+        vpp43.set_attribute(self._vi, constants.VI_ATTR_ASRL_BAUD, 115200)
+        vpp43.set_attribute(self._vi, constants.VI_ATTR_ASRL_DATA_BITS, 8)
+        vpp43.set_attribute(self._vi, constants.VI_ATTR_ASRL_STOP_BITS,
+            constants.VI_ASRL_STOP_ONE)
+        vpp43.set_attribute(self._vi, constants.VI_ATTR_ASRL_PARITY,
+            constants.VI_ASRL_PAR_ODD)
+        vpp43.set_attribute(self._vi, constants.VI_ATTR_ASRL_END_IN,
+            constants.VI_ASRL_END_NONE)
 
     # close serial connection
     def _close_serial_connection(self):
@@ -273,7 +276,7 @@ class IVVI(Instrument):
 
         # clear input buffer
         visafunc.read_all(self._vi)
-        vpp43.write(self._vi, message)
+        result = vpp43.write(self._vi, message)
 
 # In stead of blocking, we could also poll, but it's a bit slower
 #        print visafunc.get_navail(self._vi)
@@ -287,8 +290,10 @@ class IVVI(Instrument):
         # 0 = no error, 32 = watchdog reset
         if data1[1] not in (0, 32):
             logging.error('Error while reading: %s', data1)
-
-        data2 = visafunc.readn(self._vi, data1[0] - 2)
+        if data1[0] == 2: #if zero bytes are left in the rest of the message, apparently visa.read hangs awaiting...nothing
+            data2 = ''        
+        else:
+            data2 = visafunc.readn(self._vi, data1[0] - 2)
         data2 = [ord(s) for s in data2]
 
         return data1 + data2
