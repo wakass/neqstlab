@@ -18,7 +18,8 @@
 
 from instrument import Instrument
 from time import time, sleep
-import pyvisa.visa as visa
+import qtvisa
+from visa import constants
 import types
 import logging
 
@@ -56,9 +57,11 @@ class OxfordInstruments_ILM200(Instrument):
 
         self._address = address
         self._number = number
-        self._visainstrument = visa.SerialInstrument(self._address)
+        self._visainstrument = qtvisa.instrument(self._address)
         self._values = {}
-        self._visainstrument.stop_bits = 2
+        self._visainstrument.stop_bits = constants.StopBits.two
+        self._visainstrument.read_termination = '\r'
+        self._visainstrument.write_termination = '\r'
 
         #Add parameters
         self.add_parameter('level', type=types.FloatType,

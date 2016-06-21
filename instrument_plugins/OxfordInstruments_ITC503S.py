@@ -18,7 +18,8 @@
 
 from instrument import Instrument
 from time import time, sleep
-import pyvisa.visa as visa
+import qtvisa
+from visa import constants
 import types
 import logging
 
@@ -56,10 +57,11 @@ class OxfordInstruments_ITC503S(Instrument):
 
         self._address = address
         self._number = number
-        self._visainstrument = visa.SerialInstrument(self._address)
+        self._visainstrument = qtvisa.instrument(self._address)
         self._values = {}
-        self._visainstrument.stop_bits = 2
-        print 'jadoei'
+        self._visainstrument.stop_bits = constants.StopBits.two
+        self._visainstrument.read_termination = '\r'
+        self._visainstrument.write_termination = '\r'
 
         #Add parameters
         self.add_parameter('T1', type=types.FloatType,
@@ -134,9 +136,11 @@ class OxfordInstruments_ITC503S(Instrument):
             None
         '''
         logging.info(__name__ + ' : Send the following command to the device: %s' % message)
-        self._visainstrument.write('@%s%s' %(self._number, message))
-        sleep(20e-3) # wait for the device to be able to respond
+        result = self._visainstrument.write('@%s%s' %(self._number, message))
+        sleep(40e-3) # wait for the device to be able to respond
+        
         result = self._visainstrument.read()
+        print result
         if result.find('?') >= 0:
             print "Error: Command %s not recognized" %message
         else:

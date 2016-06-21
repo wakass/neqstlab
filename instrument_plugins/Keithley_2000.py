@@ -73,10 +73,11 @@ class Keithley_2000(Instrument):
         # Add some global constants
         self._address = address
         self._visainstrument = qtvisa.instrument(self._address)
+
         try:
-            self._visainstrument.read_termination = '\n'
             self._visainstrument.write_termination = '\n'
-        except:
+            self._visainstrument.read_termination = '\n'
+        except:#
             pass
         self._modes = ['VOLT:AC', 'VOLT:DC', 'CURR:AC', 'CURR:DC', 'RES',
             'FRES', 'TEMP', 'FREQ']
