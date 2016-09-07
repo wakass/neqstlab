@@ -157,13 +157,17 @@ def createCombinedFromAxes(axes):
 				'offset': 0}
 			res.append(a)
 		else:
-			scale = np.abs((p.begin - p.end) / (master.begin - master.end))*master_gain/p.module_options['gain']
+			if master.begin == master.end:
+				scale = 1.0
+				offset = 0.
+			else:
+				scale = np.abs((p.begin - p.end) / (master.begin - master.end))*master_gain/p.module_options['gain']
 			
-			#logical or to determine direction of sweep relative to master
-			if (p.begin > p.end) ^ (master.begin > master.end): #xor
-				scale = -1*scale
+				#logical or to determine direction of sweep relative to master
+				if (p.begin > p.end) ^ (master.begin > master.end): #xor
+					scale = -1*scale
 
-			offset = p.begin/p.module_options['gain'] - scale*master.begin/master_gain
+				offset = p.begin/p.module_options['gain'] - scale*master.begin/master_gain
 			
 			
 			a= {
@@ -235,7 +239,7 @@ class parspace(object):
 		self.xmlfile = ''
 		self.xs = [] #empty list of x1,x2 ..xn (param objects)
 		self.zs = [] #empty list of parmaham space
-		self.measurementname = 'Noname Measurement'
+		self.measurementname = 'NonameMeasurement'
 		self.user = None
 		
 	def load_xml(self,filename):
@@ -491,8 +495,7 @@ class parspace(object):
 							for plot2d in plots_2d:
 								plot2d.update()
 						beginSweep = True
-						
-				except Exception as e:
+      				except Exception as e:
 					print 'why is there ane xception???'					
 					print e.__doc__
 					print e.message
@@ -501,7 +504,6 @@ class parspace(object):
 				qt.msleep(0.001)
 		except (Exception,KeyboardInterrupt) as e:
 			print 'excepted error:', e 			
-			print 'Wrapped up the datafiles'
 		finally:
 			meas_dir = data.get_dir()
 			data.close_file()
@@ -509,9 +511,13 @@ class parspace(object):
 			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
 			qt.mend()
+			print 'Wrapped up the datafiles'
 			import subprocess
 			from lib.config import get_shared_config
 			user= get_shared_config().get('user')
-			
-			subprocess.call(['c:/qtlab/rsync.bat',user])
+			import platform
+			if platform.system() == 'Linux':
+				pass
+			else:
+				subprocess.call(['c:/qtlab/rsync.bat',user])
 			print 'measurement ended'
