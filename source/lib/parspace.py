@@ -4,11 +4,13 @@
 
 # from pylab import *
 import numpy as np
-from time import time,sleep
+from time import sleep
+import time
 import os
 import qt
 
 curve = np.zeros((0,2))
+COLUMN_SPECS = 'Label       sweep time (s)  steps    range        speed'
 
 class Bunch:
     def __init__(self, **kwds):
@@ -25,32 +27,44 @@ def _estimate_time_recur(axes, sweepback):
 	Assumes rate_delay values to be in milliseconds
 	'''
 	mod = axes[0].module_options
-	
-	x=Bunch
+	rate_delay = mod['rate_delay']
+	rate_stepsize = mod['rate_stepsize']
+
 	x = {}
 	ax=axes[0]
-	x['time']  = np.abs(ax.begin - ax.end) / (mod['rate_stepsize'] / (mod['rate_delay']/1000.))
-	x['steps'] = np.abs(ax.begin - ax.end) / np.abs(ax.stepsize)
+	comment_str = []
+	if ax.stepsize < rate_stepsize:
+		rate_stepsize = ax.stepsize
+		rate_delay = 36 #empirical value for delay when there are no checks done in qtlab
+	speed = rate_stepsize / (rate_delay*1e-3) 
+	
+	x['time']  = np.abs(ax.begin - ax.end) / speed
+	x['steps'] = int(np.abs(ax.begin - ax.end) / np.abs(ax.stepsize))
 	x['label'] = ax.label
 	x['range'] = np.abs(ax.begin - ax.end)
-	x['speed'] = mod['rate_stepsize'] / (mod['rate_delay']/1000.)
-	print 'For %(label)s one sweep %(time)g seconds with %(steps)d steps. Range %(range)g speed %(speed)g' % x
-
+	x['speed'] = speed
+	x['unit']  = ax.unit
+	
+	comment_str.extend( ['{label:<12} {time:<12.3}  {steps:<8d} {range:<7} {unit} {speed:7g} {unit}/s'.format(**x)])
+	
 	# Lowest-level axis
 	if len(axes) == 1:
-		return 1e-3 * mod['rate_delay'] * np.abs(
-				(axes[0].begin - axes[0].end) / mod['rate_stepsize'])
+		return (1e-3 * rate_delay * np.abs(
+				(ax.begin - ax.end) / rate_stepsize),
+				comment_str)
 	# Not lowest-level axis
 	else:
-		delay_per_step = 1e-3 * mod['rate_delay'] * (
-				float(axes[0].stepsize) / mod['rate_stepsize'])
+		delay_per_step = 1e-3 * rate_delay * (
+				float(ax.stepsize) / rate_stepsize)
 		steps = int(np.ceil(np.abs(
-				(axes[0].begin - axes[0].end) / axes[0].stepsize)))
+				(ax.begin - ax.end) / ax.stepsize)))
 		vals = steps + 1
 		if not sweepback:
 			vals = 2 * vals - 1
-		lower_level_time = _estimate_time_recur(axes[1:], sweepback)
-		return steps * delay_per_step + vals * lower_level_time
+		lower_level_time,comment = _estimate_time_recur(axes[1:], sweepback)
+		comment_str.extend(comment)
+		return (steps * delay_per_step + vals * lower_level_time,
+			comment_str)
 
 def _estimate_time_hilbert(axes, n):
 	'''
@@ -281,40 +295,47 @@ class parspace(object):
 	
 	
 	def taketime_interval(self):
-		diff_time = time() - self.b_time
-		self.b_time = time()
+		diff_time = time.time() - self.b_time
+		self.b_time = time.time()
 		return diff_time
 	def taketime_reset(self):
-		self.b_time = time()
+		self.b_time = time.time()
 	def taketime_passed_since_reset(self):
-		diff_time = time() - self.b_time
+		diff_time = time.time() - self.b_time
 		return diff_time
-
+	def _estimate_time_seconds(self, *args,**kwargs):
+		seconds = 0
+		comment_str = ''
+		sweepback=False
+		#get the arguments from the traverse_gen	
+		cellvalue = get_cell_value(self.traverse_gen.func_closure[1])
+		if self.traverse_name == 'sweep':
+			if 'sweepback' in cellvalue:
+				sweepback = cellvalue['sweepback']
+			seconds,comment_str = _estimate_time_recur(self.xs, sweepback)
+		if self.traverse_name == 'hilbert':
+			if 'n' in cellvalue:
+				n = cellvalue['n']
+			seconds = _estimate_time_hilbert(self.xs, n)
+			
+		return seconds,comment_str
 	def estimate_time(self, sweepback=False):
 		'''
 		Estimate execution time
 		Assumes rate_delay values to be im milliseconds
 		'''
-		#get the arguments from the traverse_gen	
 		try:
-			seconds = 0
-			cellvalue = get_cell_value(self.traverse_gen.func_closure[1])
-			if self.traverse_name == 'sweep':
-				if 'sweepback' in cellvalue:
-					sweepback = cellvalue['sweepback']
-				seconds = _estimate_time_recur(self.xs, sweepback)
-			if self.traverse_name == 'hilbert':
-				if 'n' in cellvalue:
-					n = cellvalue['n']
-				seconds = _estimate_time_hilbert(self.xs, n)
+			seconds,comment_str = self._estimate_time_seconds(sweepback)
+			seconds = int(seconds) #convert to int to avoid floating point weirdness in divmod
 			(minutes, seconds) = divmod(seconds, 60)
 			(hours, minutes) = divmod(minutes, 60)
 			(days, hours) = divmod(hours, 24)
+			print COLUMN_SPECS
+			print '\n'.join(comment_str)
 			print('Total estimated time: {:.0f}d {:.0f}h {:.0f}m {:.0f}s'
 					.format(days, hours, minutes, seconds))
 		except Exception as e:
 			print(e)
-		
 
 	def traverse(self):
 		'''
@@ -345,9 +366,9 @@ class parspace(object):
 			instruments  = np.append(instruments, instr)
 
 		data = qt.Data(name=self.measurementname)
-		
+		self.data=data
 		qt.mstart()
-		
+		begintime = time.time()
 		cnt=0
 		for i in self.xs:
 			cnt+=1
@@ -513,5 +534,11 @@ class parspace(object):
 			from lib.config import get_shared_config
 			user= get_shared_config().get('user')
 			
-			subprocess.call(['c:/qtlab/rsync.bat',user])
+			#subprocess.call(['c:/qtlab/rsync.bat',user])
+			timepassed_seconds = time.time() - begintime
+			timepassed_str = time.strftime("%H:%M:%S", time.gmtime(timepassed_seconds))
+			timepredicted_seconds,comment_str = self._estimate_time_seconds()
+			timepredicted_str = time.strftime("%H:%M:%S", time.gmtime(timepredicted_seconds))
+			print 'time predicted was {:s}'.format(timepredicted_str)
+			print 'measurement took {:s}'.format(timepassed_str)
 			print 'measurement ended'
