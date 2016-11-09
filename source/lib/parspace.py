@@ -13,6 +13,7 @@ import numpy as np
 from time import sleep
 import time
 import os
+import platform
 import qt
 
 
@@ -545,9 +546,9 @@ class parspace(object):
 			
 			execdir = config.get_config().get('execdir')
 			syncscript = None
-			if os.sys.platform == 'Linux':
+			if platform.system() == ('Linux' or 'Darwin'):
 				syncscript = os.path.join(execdir,'rsync')
-			elif os.sys.platform == 'Windows':
+			elif platform.system() == 'Windows':
 				syncscript = os.path.join(execdir,'rsync.bat')
 			
 			print 'calling syncscript: {:s}, for user {:s}'.format(syncscript,user)
