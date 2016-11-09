@@ -3,11 +3,19 @@
 
 
 # from pylab import *
+import lib.config as config
+import subprocess
+from lib.config import get_shared_config
+from lib.file_support.spyview import SpyView
+
+
 import numpy as np
 from time import sleep
 import time
 import os
 import qt
+
+
 
 curve = np.zeros((0,2))
 COLUMN_SPECS = 'Label       sweep time (s)  steps    range        speed'
@@ -527,18 +535,26 @@ class parspace(object):
 			meas_dir = data.get_dir()
 			data.close_file()
 
-			from lib.file_support.spyview import SpyView
 			SpyView(data).write_meta_file()
 			qt.mend()
-			import subprocess
-			from lib.config import get_shared_config
-			user= get_shared_config().get('user')
-			
-			if platform.system() == 'Linux':
-				subprocess.Popen(['./rsync'])
-			else if platform.system() = 'Windows':
-				subprocess.Popen(['./rsync.bat',user])
 
+			#determine the syncing script and call it with user as argument.
+			user = get_shared_config().get('user')
+			if user is None:
+				user = 'Default'
+			
+			execdir = config.get_config().get('execdir')
+			syncscript = None
+			if os.sys.platform == 'Linux':
+				syncscript = os.path.join(execdir,'rsync')
+			elif os.sys.platform == 'Windows':
+				syncscript = os.path.join(execdir,'rsync.bat')
+			
+			print 'calling syncscript: {:s}, for user {:s}'.format(syncscript,user)
+			if not syncscript is None:
+				subprocess.Popen([syncscript,user])
+			
+			#print some statistics on the measurement
 			timepassed_seconds = time.time() - begintime
 			timepassed_str = time.strftime("%H:%M:%S", time.gmtime(timepassed_seconds))
 			timepredicted_seconds,comment_str = self._estimate_time_seconds()
