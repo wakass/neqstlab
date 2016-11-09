@@ -551,7 +551,7 @@ class parspace(object):
 				syncscript = os.path.join(execdir,'rsync.bat')
 			
 			print 'calling syncscript: {:s}, for user {:s}'.format(syncscript,user)
-			if not syncscript is None:
+			if syncscript:
 				subprocess.Popen([syncscript,user])
 			
 			#print some statistics on the measurement
