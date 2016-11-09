@@ -534,7 +534,11 @@ class parspace(object):
 			from lib.config import get_shared_config
 			user= get_shared_config().get('user')
 			
-			#subprocess.call(['c:/qtlab/rsync.bat',user])
+			if platform.system() == 'Linux':
+				subprocess.Popen(['./rsync'])
+			else if platform.system() = 'Windows':
+				subprocess.Popen(['./rsync.bat',user])
+
 			timepassed_seconds = time.time() - begintime
 			timepassed_str = time.strftime("%H:%M:%S", time.gmtime(timepassed_seconds))
 			timepredicted_seconds,comment_str = self._estimate_time_seconds()
