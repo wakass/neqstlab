@@ -38,15 +38,31 @@ def _estimate_time_recur(axes, sweepback):
 	mod = axes[0].module_options
 	rate_delay = mod['rate_delay']
 	rate_stepsize = mod['rate_stepsize']
-
-	x = {}
 	ax=axes[0]
-	comment_str = []
-	if ax.stepsize < rate_stepsize:
-		rate_stepsize = ax.stepsize
-		rate_delay = 36 #empirical value for delay when there are no checks done in qtlab
-	speed = rate_stepsize / (rate_delay*1e-3) 
+
+
+	rate_delay_extrinsic = 4
+	if ax.stepsize < rate_stepsize: #rate_delay is effectively zero and rate is determined by extrinsic rate
+		rate_delay = 0
+
+	#see how long we would spend in the loop to increase the axis with ax.stepsize by n-increments with rate_stepsize per rate_delay
+	inc_whole = ax.stepsize % float(rate_stepsize) == 0
+	increments_per_step = np.floor(ax.stepsize / float(rate_stepsize))
+	if inc_whole:
+		increments_per_step -= 1
+	#the amount of steps INSIDE the qtlab loop with an associated delay
+	#if there is still a delta = x_new - x_old > 0 but smaller than rate_stepsize, a delay will not be issued 
+	delay_inside_loop = increments_per_step * rate_delay
 	
+	steps = int(np.ceil(np.abs((ax.begin - ax.end) / ax.stepsize)))
+ 	delay_per_step = 1e-3 * (delay_inside_loop + rate_delay_extrinsic)
+
+	
+	
+	comment_str = []
+	speed = ax.stepsize / delay_per_step
+	
+	x = {}	
 	x['time']  = np.abs(ax.begin - ax.end) / speed
 	x['steps'] = int(np.abs(ax.begin - ax.end) / np.abs(ax.stepsize))
 	x['label'] = ax.label
@@ -55,18 +71,13 @@ def _estimate_time_recur(axes, sweepback):
 	x['unit']  = ax.unit
 	
 	comment_str.extend( ['{label:<12} {time:<12.3}  {steps:<8d} {range:<7} {unit} {speed:7g} {unit}/s'.format(**x)])
+
 	
 	# Lowest-level axis
 	if len(axes) == 1:
-		return (1e-3 * rate_delay * np.abs(
-				(ax.begin - ax.end) / rate_stepsize),
-				comment_str)
+		return (steps * delay_per_step, comment_str)
 	# Not lowest-level axis
 	else:
-		delay_per_step = 1e-3 * rate_delay * (
-				float(ax.stepsize) / rate_stepsize)
-		steps = int(np.ceil(np.abs(
-				(ax.begin - ax.end) / ax.stepsize)))
 		vals = steps + 1
 		if not sweepback:
 			vals = 2 * vals - 1
@@ -74,6 +85,7 @@ def _estimate_time_recur(axes, sweepback):
 		comment_str.extend(comment)
 		return (steps * delay_per_step + vals * lower_level_time,
 			comment_str)
+
 
 def _estimate_time_hilbert(axes, n):
 	'''
@@ -123,7 +135,8 @@ def sweep_gen(xs,**lopts):
 	#sets the datablock bit in the part of a dict
 	#first part of the tuple is always the list datapoints to set
 	
-	lopts['flipbit']=0
+	lopts['flipbit']=Bunch() #we need a 'global' counter to keep ref of what bits were flipped
+	lopts['flipbit'].bit=0
 	for a in sweep_gen_helper(xs,**lopts):
 		yield a
 		
@@ -143,15 +156,16 @@ def sweep_gen_helper(xs,**lopts):
 	
 	u = np.linspace(x.begin,x.end,round(np.abs((x.end-x.begin)/x.stepsize) +1)) #round here because we need an integer and not a weird outcome like ((.5-.2)/.1)==2.99999996..wtf
 	
-
-	if 'flipbit' in lopts and lopts['flipbit'] == 1:
+	thisbit = 1 << (len(xs)-1)
+	if 'flipbit' in lopts and (lopts['flipbit'].bit & thisbit == thisbit):
 		u = np.flipud(u)
 	if len(xs) > 1:
-		for i in u:
+		for i in u:		
 			for a in sweep_gen_helper(xs[1:],**lopts):
 				yield {'dp': np.hstack(([i],a['dp'])),'newblock':a['newblock']}
-			if 'sweepback' in lopts and lopts['sweepback'] == 'on':
-				lopts['flipbit'] ^= 1
+			if 'sweepback' in lopts and lopts['sweepback']:
+				lopts['flipbit'].bit ^= (thisbit>>1) #flip the bit corresponding to the NEXT column
+
 	else:
 		for i in u[:-1]:
 			yield {'dp': [i], 'newblock':0}
@@ -496,6 +510,7 @@ class parspace(object):
 				except Exception as e:
 					print 'Exception caught while trying to set axes: ', e				
 					print e
+				
 				if hasattr(self.zs[0],'module_options'):
 					if 'measure_wait' in self.zs[0].module_options:
 						mwait = self.zs[0].module_options['measure_wait']
