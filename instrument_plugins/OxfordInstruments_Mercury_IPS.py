@@ -74,9 +74,13 @@ class OxfordInstruments_Mercury_IPS(Instrument):
 
 
         self._address = address
-        self._visainstrument = visa.instrument(self._address,timeout=20)
+        self._visainstrument = visa.instrument(self._address,timeout=100)
         self._values = {}
         self._visainstrument.term_chars = '\r\n'
+
+        self._x = 0.
+        self._y = 0.
+        self._z = 0.
 
         #Add parameters
         
@@ -92,8 +96,8 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             #READ:SYS:VRM:COO
             flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
             format_map = {
-            'CART' : "Cartresian",
-            'CYL' : "Cyclindrical",
+            'CYL' : "Cylindrical",
+            'CART' : "Cartesian",
             'SPH' : "Spherical",
             })
             
@@ -336,14 +340,17 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         #[0.0000T 0.00000rad 0.0000T]
         #r theta phi, spherical 
         #[0.0000T 0.00000rad 0.00000rad]
-        
+        self._x = float(found[0][0])
+        self._y = float(found[0][1])
+        self._z = float(found[0][2])
+
         print found
         if channel=='X':
-            return found[0][0]
+            return self._x
         if channel=='Y':
-            return found[0][1]
+            return self._y
         if channel=='Z':
-            return found[0][2]
+            return self._z
         
     def do_get_max_field_sweep(self):
         logging.info(__name__ + ' : Read current coordinate system')
@@ -376,7 +383,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
     def do_set_setpoint(self,val):
         logging.info(__name__ + ' : Set ')
         mode = 'RATE'
-        rate = 0.2
+        rate = 0.1
         tesla = val
         print tesla
         command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[0 0 %.3f]'%(mode,rate,tesla)
@@ -396,22 +403,20 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         
         command=[]
         mode = 'RATE'
-        rate =0.2
+        rate =0.1
 
-        x = self.get_target_vectorX()
-        y = self.get_target_vectorY()
-        z = self.get_target_vectorZ()
-        # x=self.
-        # y=0
-        # z=self.get_
+
         coordsys = self.get_coordinatesys()
         if coordsys == 'CART':
             if channel=='X':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,y,z)
+                self._x = val
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,self._y,self._z)
             if channel=='Y':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,val,z)
+                self._y = val
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,self._x,val,self._z)
             if channel=='Z':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,x,y,val)
+                self._z = val
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,self._x,self._y,val)
         elif coordsys == 'SPH':
             if channel=='X':
                 command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,val,y,z)
@@ -421,6 +426,7 @@ class OxfordInstruments_Mercury_IPS(Instrument):
                 command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,y,val)
                  
         result = self._execute(command)
+
        # print result
     
 	# def get_changed(self):
