@@ -247,7 +247,6 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         SCPIstring = 'SET:DEV:GRP' + channel + ':PSU:ACTN:' + val
         result = self._execute(SCPIstring)
         res = (result.replace('STAT:DEV:GRP' + channel  + ':PSU:ACTN:',''))
-        print self._waitforcompletion_x
 
         if channel == 'X' and self._waitforcompletion_x == 'On':
             while self.get_activityX() != 'HOLD':
@@ -369,7 +368,6 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
             self._waitforcompletion_y = val
         if channel == 'Z':
             self._waitforcompletion_z = val
-        return res
 
     def do_get_waitforsweepcompletion(self,channel):
         if channel == 'X':
@@ -378,7 +376,6 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
             return self._waitforcompletion_y
         if channel == 'Z':
             return self._waitforcompletion_z
-        return res
 
     def do_get_switch_heater(self,channel):
         SCPIstring = 'READ:DEV:GRP' + channel + ':PSU:SIG:SWHT?'
