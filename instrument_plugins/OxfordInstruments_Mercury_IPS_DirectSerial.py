@@ -178,7 +178,7 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self.get_waitforsweepcompletionZ()
         # self.do_get_switch_heaterX()
         # self.do_get_switch_heaterY()
-        self.do_get_switch_heaterZ()
+        self.get_switch_heaterZ()
 
     # Functions
     def _execute(self, message):
