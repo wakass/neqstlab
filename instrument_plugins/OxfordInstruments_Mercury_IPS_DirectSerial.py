@@ -27,6 +27,7 @@ from time import time, sleep
 import pyvisa.visa as visa
 import types
 import logging
+import math
 
 import re
 
@@ -81,6 +82,7 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self._waitforcompletion_x = 'Off' 
         self._waitforcompletion_y = 'Off' 
         self._waitforcompletion_z = 'Off' 
+        self._dummy = 0.
                 
         self.add_parameter('vector', type=types.FloatType,
             flags=Instrument.FLAG_GET, format='%.6f',
@@ -132,6 +134,22 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
             },
             channels=('X', 'Y', 'Z'))
 
+        self.add_parameter('activity_all', type=types.StringType,
+            flags=Instrument.FLAG_GETSET | Instrument.FLAG_GET_AFTER_SET,
+            format_map = {
+            'HOLD' : "Hold",
+            'RTOS' : "Ramp to setpoint",
+            'RTOZ' : "Ramp to zero",
+            'CLMP' : "Clamp if current = 0",
+            'Busy' : "One of the PSU's is not on hold"
+            })
+
+        self.add_parameter('B_magnitude', type=types.FloatType,
+            flags=Instrument.FLAG_GET, format='%.6f')
+
+        self.add_parameter('dummy', type=types.FloatType,
+            flags=Instrument.FLAG_GETSET, format='%.6f')
+
         # Add functions
         self.add_function('get_all')
         self.get_all()
@@ -155,9 +173,6 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self.get_ratecurrX()
         self.get_ratecurrY()
         self.get_ratecurrZ()
-        self.get_vectorX()
-        self.get_vectorY()
-        self.get_vectorZ()
         self.get_vectorcurrX()
         self.get_vectorcurrY()
         self.get_vectorcurrZ()
@@ -170,15 +185,12 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self.get_target_vectorX()
         self.get_target_vectorY()
         self.get_target_vectorZ()
-        self.get_vectorX()
-        self.get_vectorY()
-        self.get_vectorZ()
         self.get_waitforsweepcompletionX()
         self.get_waitforsweepcompletionY()
         self.get_waitforsweepcompletionZ()
-        # self.do_get_switch_heaterX()
-        # self.do_get_switch_heaterY()
         self.get_switch_heaterZ()
+        self.get_B_magnitude()
+        self.get_activity_all()
 
     # Functions
     def _execute(self, message):
@@ -257,9 +269,36 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         if channel == 'Z' and self._waitforcompletion_z == 'On':
             while self.get_activityZ() != 'HOLD':
                 sleep(0.1)
-        self.get_vectorX()
-        self.get_vectorY()
-        self.get_vectorZ()
+        self.get_B_magnitude()
+        self.get_vectorcurrX()
+        self.get_vectorcurrY()
+        self.get_vectorcurrZ()
+        return res
+
+    def do_get_activity_all(self):
+        aX = self.get_activityX()
+        aY = self.get_activityY()
+        aZ = self.get_activityZ()
+        if aX != 'HOLD'or aY != 'HOLD' or aZ != 'HOLD':
+            return 'Busy'
+        else: 
+            return 'HOLD'
+
+    def do_set_activity_all(self, val):
+        SCPIstring = 'SET:DEV:GRPX:PSU:ACTN:' + val
+        result = self._execute(SCPIstring)
+        res = (result.replace('STAT:DEV:GRPX:PSU:ACTN:',''))
+        SCPIstring = 'SET:DEV:GRPY:PSU:ACTN:' + val
+        result = self._execute(SCPIstring)
+        res = (result.replace('STAT:DEV:GRPY:PSU:ACTN:',''))
+        SCPIstring = 'SET:DEV:GRPZ:PSU:ACTN:' + val
+        result = self._execute(SCPIstring)
+        res = (result.replace('STAT:DEV:GRPZ:PSU:ACTN:',''))
+
+        if self._waitforcompletion_x == 'On' or self._waitforcompletion_y == 'On' or self._waitforcompletion_z == 'On':
+            while self.get_activity_all() != 'HOLD':
+                sleep(0.1)
+        self.get_B_magnitude()
         self.get_vectorcurrX()
         self.get_vectorcurrY()
         self.get_vectorcurrZ()
@@ -308,7 +347,6 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self.get_rateZ()
         return res
 
-
     def do_get_target_vector(self,channel):
         SCPIstring = 'READ:DEV:GRP' + channel + ':PSU:SIG:FSET?'
         result = self._execute(SCPIstring)
@@ -334,6 +372,10 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         self.get_target_vectorcurrY()
         self.get_target_vectorcurrZ()
         return res
+
+    def do_get_B_magnitude(self):
+        bmag = (self.get_vectorX()**2+self.get_vectorY()**2+self.get_vectorZ()**2)**0.5
+        return bmag
 
     def do_get_target_vectorcurr(self,channel):
         SCPIstring = 'READ:DEV:GRP' + channel + ':PSU:SIG:CSET?'
@@ -389,3 +431,17 @@ class OxfordInstruments_Mercury_IPS_DirectSerial(Instrument):
         res = (result.replace('STAT:DEV:GRP' + channel  + ':PSU:SIG:SWHT:',''))
         sleep(1.0) #Important! Mercury iPS needs this time to process the new setpoint
         return res
+
+    def do_get_rate(self, channel):
+        SCPIstring = 'READ:DEV:GRP' + channel + ':PSU:SIG:RFST?'
+        result = self._execute(SCPIstring)
+        res = (result.replace('STAT:DEV:GRP' + channel  + ':PSU:SIG:RFST:',''))
+        res = res[:-3]
+        return res
+
+    def do_get_dummy(self):
+        return self._dummy
+
+    def do_set_dummy(self, val):
+        self._dummy = val
+        return val
