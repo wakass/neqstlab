@@ -249,6 +249,13 @@ class SR830(Instrument):
         the Y component is zero
         '''
         self._visainstrument.write('APHS')
+		
+    def auto_gain(self):
+        '''
+        offsets the phase so that
+        the Y component is zero
+        '''
+        self._visainstrument.write('AGAN')
 
     def direct_output(self):
         '''

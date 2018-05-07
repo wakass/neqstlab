@@ -82,6 +82,13 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         self._y = 0.
         self._z = 0.
 
+        self._buffer_x = 0.
+        self._buffer_y = 0.
+        self._buffer_z = 0.
+        
+        self._rate_x = 0.2
+        self._rate_y = 0.2
+        self._rate_z = 0.2
         #Add parameters
         
         #x,y,z -> enter setpoint
@@ -117,7 +124,26 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             #READ:SYS:VRM:TVEC
             flags=Instrument.FLAG_GETSET,
             channels=('X', 'Y', 'Z'))
+
+        self.add_parameter('target_vectorXYZ', type=types.TupleType,
+            #READ:SYS:VRM:TVEC
+            flags=Instrument.FLAG_SET)
+
+        self.add_parameter('target_vector_from_buffer', type=types.FloatType,
+            #READ:SYS:VRM:TVEC
+            flags=Instrument.FLAG_SET)
+
+        self.add_parameter('buffer', type=types.FloatType,
+            #READ:SYS:VRM:TVEC
+            flags=Instrument.FLAG_GETSET,
+            channels=('X', 'Y', 'Z'))
+
         
+        self.add_parameter('rate', type=types.FloatType,
+            #Internal rate of sweeping
+            flags=Instrument.FLAG_GETSET,
+            channels=('X', 'Y', 'Z'))
+
         self.add_parameter('max_field_sweep', type=types.StringType,
             #max field sweep
             #[dBx/dt dBy/dt dBz/dt], tesla/minute
@@ -168,22 +194,19 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         '''
         logging.info(__name__ + ' : reading all settings from instrument')
         self.get_coordinatesys()
-        #self.get_vector()
-        self.get_target_vectorX()
-        self.get_target_vectorY()
-        self.get_target_vectorZ()
+        self.get_rateX()
+        self.get_rateY()
+        self.get_rateZ()
+        #self.get_target_vectorXYZ()
+        # self.get_vectorXYZ()
         self.get_vectorX()
         self.get_vectorY()
         self.get_vectorZ()
-        
-        
-        # self.get_max_field_sweep()
-        # self.get_sweep_mode()
-        # self.get_setpoint()
+        self.get_sweep_mode()
         self.get_activity()
-        # self.get_mode()
-        # self.get_activity()
-
+        # self.get_buffer_x()
+        # self.get_buffer_y()
+        # self.get_buffer_z()
 
     # Functions
     def _execute(self, message):
@@ -313,6 +336,36 @@ class OxfordInstruments_Mercury_IPS(Instrument):
             return found[0][1]
         if channel=='Z':
             return found[0][2]
+
+    def do_get_target_vectorXYZ(self):
+        logging.info(__name__ + ' : Read current coordinate system')
+        result = self._execute('READ:SYS:VRM:TVEC')
+        res = (result.replace('STAT:SYS:VRM:TVEC:',''))
+        
+        found = None
+        
+        print self.do_get_coordinatesys()
+        print res
+        coordsys = self.do_get_coordinatesys()
+        if coordsys == 'CART':
+            tesla = re.compile(r'^\[(.*)T (.*)T (.*)T\]$')
+            found = tesla.findall(res)
+        elif coordsys == 'SPH':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)rad\]$')
+            found = tesla.findall(res)
+        elif coordsys == 'CYL':
+            tesla = re.compile(r'^\[(.*)T (.*)rad (.*)T\]$')
+            found = tesla.findall(res)
+        else:
+            logging.info(__name__ + ' : Other than cartesian not yet supported')
+            return
+        self._x = float(found[0][0])
+        self._y = float(found[0][1])
+        self._z = float(found[0][2])
+        selfxyz = [self._x,self._y,self._z]
+        print found
+        return selfxyz
+
         
     def do_get_target_vector(self,channel):
         logging.info(__name__ + ' : Read current coordinate system')
@@ -360,10 +413,10 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         logging.info(__name__ + ' : Read current coordinate system')
         result = self._execute('READ:SYS:VRM:RVST:MODE')
         return (result.replace('STAT:SYS:VRM:RVST:MODE:',''))
-    def do_get_setpoint(self):
-        logging.info(__name__ + ' : Read setpoint')
-        result = self._execute('READ:SYS:VRM:VSET')
-        return (result.replace('STAT:SYS:VRM:VSET:',''))        
+    # def do_get_setpoint(self):
+        # logging.info(__name__ + ' : Read setpoint')
+        # result = self._execute('READ:SYS:VRM:VSET')
+        # return (result.replace('STAT:SYS:VRM:VSET:',''))        
     def do_get_activity(self):
         logging.info(__name__ + ' : Read activity of magnet')
         result = self._execute('READ:SYS:VRM:ACTN')
@@ -380,24 +433,100 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         logging.info(__name__ + ' : Set ')
         result = self._execute('SET:SYS:VRM:VECT:%s' % val)
         return (result.replace('SET:SYS:VRM:VECT:',''))
-    def do_set_setpoint(self,val):
-        logging.info(__name__ + ' : Set ')
-        mode = 'RATE'
-        rate = 0.1
-        tesla = val
-        print tesla
-        command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[0 0 %.3f]'%(mode,rate,tesla)
+    # def do_set_setpoint(self,val):
+        # logging.info(__name__ + ' : Set ')
+        # mode = 'RATE'
+        # rate = 0.1
+        # tesla = val
+        # print tesla
+        # command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[0 0 %.3f]'%(mode,rate,tesla)
 
-        result = self._execute(command)
-        print result
+        # result = self._execute(command)
+        # print result
         
-        return (result.replace('SET:SYS:VRM:VSET:',''))
+        # return (result.replace('SET:SYS:VRM:VSET:',''))
     def do_set_activity(self,val):
+        while self.get_activity() != 'IDLE':
+            sleep(1.0)
         logging.info(__name__ + ' : Set ')
         result = self._execute('SET:SYS:VRM:ACTN:%s' % val)
+        # while self.get_activity() != 'IDLE':
+            # print 'Waiting for magnet to become IDLE'
+            # sleep(1.0)
         return (result.replace('STAT:SET:SYS:VRM:ACTN:',''))
-    
+
+    def do_set_rate(self, val, channel):
+        if channel =='X':
+            self._rate_x = val
+        if channel =='Y':
+            self._rate_y = val
+        if channel =='Z':
+            self._rate_z = val
+    def do_get_rate(self, channel):
+        if channel =='X':
+            return self._rate_x
+        if channel =='Y':
+            return self._rate_y
+        if channel =='Z':
+            return self._rate_z
+
+    def do_set_buffer(self, val, channel):
+        if channel =='X':
+            self._buffer_x = val
+        if channel =='Y':
+            self._buffer_y = val
+        if channel =='Z':
+            self._buffer_z = val
+
+    def do_get_buffer(self, channel):
+        if channel =='X':
+            return self._buffer_x
+        if channel =='Y':
+            return self._buffer_y
+        if channel =='Z':
+            return self._buffer_z
+
+    def do_set_target_vectorXYZ(self,val):
+        while self.get_activity() != 'IDLE':
+            print 'Waiting for magnet to become IDLE'
+            sleep(1.0)
+        print val
+        logging.info(__name__ + ' : Read current coordinate system')
+        command=[]
+        mode = 'RATE'
+        rate =0.2
+        coordsys = self.get_coordinatesys()
+        if coordsys == 'CART':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,self._rate_x,val[0],val[1],val[2])
+        elif coordsys == 'SPH':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,rate,val[0],val[1],val[2])
+        result = self._execute(command)
+
+    def do_set_target_vector_from_buffer(self,dummy):
+        while self.get_activity() != 'IDLE':
+            print 'Waiting for magnet to become IDLE'
+            sleep(1.0)
+        val = [0,0,0]
+        print self.get_bufferX()
+        val[0] = self.get_bufferX()
+        val[1] = self.get_bufferY()
+        val[2] = self.get_bufferZ()
+        print val
+        logging.info(__name__ + ' : Read current coordinate system')
+        command=[]
+        mode = 'RATE'
+        rate =0.2
+        coordsys = self.get_coordinatesys()
+        if coordsys == 'CART':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,self._rate_x,val[0],val[1],val[2])
+        elif coordsys == 'SPH':
+            command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,rate,val[0],val[1],val[2])
+        result = self._execute(command)
+
     def do_set_target_vector(self,val,channel):
+        while self.get_activity() != 'IDLE':
+            print 'Waiting for magnet to become IDLE'
+            sleep(1.0)
         logging.info(__name__ + ' : Read current coordinate system')
         
         
@@ -410,20 +539,20 @@ class OxfordInstruments_Mercury_IPS(Instrument):
         if coordsys == 'CART':
             if channel=='X':
                 self._x = val
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,val,self._y,self._z)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,self._rate_x,val,self._y,self._z)
             if channel=='Y':
                 self._y = val
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,self._x,val,self._z)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,self._rate_y,self._x,val,self._z)
             if channel=='Z':
                 self._z = val
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.3f %.3f]'%(mode,rate,self._x,self._y,val)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,self._rate_z,self._x,self._y,val)
         elif coordsys == 'SPH':
             if channel=='X':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,val,y,z)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,rate,val,y,z)
             if channel=='Y':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,val,z)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,rate,x,val,z)
             if channel=='Z':
-                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.3f %.4f %.4f]'%(mode,rate,x,y,val)
+                command = 'SET:SYS:VRM:RVST:MODE:%s:RATE:%.6f:VSET:[%.6f %.6f %.6f]'%(mode,rate,x,y,val)
                  
         result = self._execute(command)
 
